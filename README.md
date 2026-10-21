@@ -71,6 +71,20 @@ reads the registry). It ships the orchestrator, not the readers.
 
 **Utility** — `workflow-flightplan`, `workflow-groceries`, `workflow-update-deps`.
 
+## pi resources
+
+The repo also carries a small slice of pi configuration, installed by `install.sh`
+(skip with `PI=0`):
+
+- `.pi/agent/themes/capo-dark.json` — a dark theme
+- `.pi/agent/extensions/` — `cage-indicator.ts` (shows when a command runs inside a
+  cage), `process-path.ts` (marks processes started by pi), `zj-radar.js` (zellij pane radar)
+- `.pi/agent/extensions-config/pi-tool-display.json` — config for the tool-display
+  extension, which lives in its own repo (`mendeljacks/pi-tool-display`)
+
+Extensions are copied, not linked, so pi can write next to them; re-run `install.sh`
+after pulling to refresh them.
+
 ## Runtime notes
 
 Everything is bash + jq except two places that ship Python because the job needs a real

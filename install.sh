@@ -5,6 +5,7 @@
 #   ./install.sh slack zellij   link only the named ones
 #   ./install.sh --copy         copy instead of symlink (containers, throwaway VMs)
 #   DEST=/some/path ./install.sh  install somewhere other than ~/.agents/skills
+#   PI=0 ./install.sh            skip the .pi/agent themes/extensions copy
 #
 # Skills resolve from <dest>/<name>/SKILL.md, where <name> is the directory name and
 # should match the `name:` in its frontmatter.
@@ -64,6 +65,18 @@ for n in "${targets[@]}"; do
     copy) cp -R "$src" "$dst"; echo "  copy  $n" ;;
   esac
 done
+
+# pi resources: a theme and a few extensions, if this repo carries them
+if [ "${PI:-1}" = 1 ] && [ -d "$ROOT/.pi/agent" ]; then
+  target="$HOME/.pi/agent"
+  mkdir -p "$target"
+  for kind in themes extensions extensions-config; do
+    [ -d "$ROOT/.pi/agent/$kind" ] || continue
+    mkdir -p "$target/$kind"
+    cp -R "$ROOT/.pi/agent/$kind/." "$target/$kind/" 2>/dev/null || true
+    echo "  pi    $kind -> $target/$kind"
+  done
+fi
 
 echo
 echo "$(printf '%s\n' "${targets[@]}" | wc -l) skill(s) in $DEST"
