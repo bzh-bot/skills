@@ -7,7 +7,8 @@ set -euo pipefail
 # Usage:
 #   slack_api.sh <workspace> <command> [args...] [--raw]
 #
-# Workspaces map to env files in ~/secrets/env/:
+# Workspaces map to one env file each, in $SLACK_SECRETS_DIR
+# (default: ~/.config/slack):
 #   <ws>   → slack_<ws>.env
 #   <ws2> → slack_<ws2>.env
 #
@@ -39,7 +40,7 @@ set -euo pipefail
 #   3. DevTools → Network → find any request to slack.com/api/* → look for "token" param → starts with xoxc- → SLACK_XOXC_TOKEN
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SECRETS_DIR="${SLACK_SECRETS_DIR:-$HOME/secrets/env}"
+SECRETS_DIR="${SLACK_SECRETS_DIR:-$HOME/.config/slack}"
 SLACK_API="https://slack.com/api"
 RAW=false
 
@@ -69,7 +70,7 @@ resolve_workspace() {
 }
 
 check_tokens() {
-  : "${SLACK_XOXC_TOKEN:?SLACK_XOXC_TOKEN is not set (source the env file or create ~/secrets/env/slack_<workspace>.env)}"
+  : "${SLACK_XOXC_TOKEN:?SLACK_XOXC_TOKEN is not set (source the env file or create $SLACK_SECRETS_DIR/slack_<workspace>.env)}"
   : "${SLACK_XOXD_TOKEN:?SLACK_XOXD_TOKEN is not set}"
 }
 
