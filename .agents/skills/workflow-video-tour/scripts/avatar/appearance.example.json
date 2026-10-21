@@ -1,0 +1,43 @@
+{
+  "_comment": "Every knob of scripts/avatar/avatar-render.py. Values below are the ones that survived review on the PR-290 run (<org>, 2026-09-30): neutral palette derived from a headshot, short hair, two-tone beard, no glasses, plain white shirt, translucent static card. Only the three starred keys cannot be sampled from a photo.",
+
+  "skin": "#CDA9A2",
+  "skin_shadow": "#A78780",
+  "lips": "#A5645C",
+
+  "hair": "#1E1514",
+  "hair_length": "short",
+
+  "beard": true,
+  "beard_dark": "#2E2018",
+  "beard_warm": "#8F4E22",
+
+  "glasses": false,
+  "frame_colour": "#8A8A93",
+  "frame_width": 1.1,
+  "lens_colour": "#DCE6EF",
+  "lens_alpha": 12,
+
+  "shirt_style": "plain",
+  "shirt": "#F7F5F2",
+  "shirt_check": "#7B2233",
+  "check_cell": 11,
+  "collar": "#FCFBF9",
+
+  "card": "#0C0C10",
+  "card_alpha": 168,
+  "accent": "#CBB9C2",
+  "ring_width": 2.2,
+  "ring_alpha": 130,
+  "shadow_alpha": 90,
+
+  "_notes": {
+    "hair_length": "short = tapered sideburns ending above the ears; long adds a mass behind the head and reaches the shoulders",
+    "beard": "jaw and chin only — the renderer never lets it reach the cheekbone",
+    "beard_dark / beard_warm": "two-tone gradient, sideburns -> chin; keep beard_dark near `hair` so the beard reads as the same person",
+    "glasses": "keep lens_alpha <= 12 — anything darker reads as sunglasses",
+    "shirt_style": "plain | trim (burgundy placket + buttons) | gingham (white with burgundy checks)",
+    "card_alpha": "168 ~= 66% opaque: the app shows through, the figure stays solid",
+    "ring_width/ring_alpha/shadow_alpha": "static card furniture — nothing on the card animates by design"
+  }
+}

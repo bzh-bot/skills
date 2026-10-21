@@ -1,0 +1,143 @@
+{
+  "_comment": "workflow-release-video phases. Reuses the workflow-video-tour engine (scripts) unchanged; R1 and the R2 conventions are what this skill adds.",
+  "skill": "workflow-release-video",
+  "version": "1.2.0",
+  "entrypoint": "direct invocation, or the chief of staff's release flow",
+  "target": {
+    "seconds": 244,
+    "band": [
+      230,
+      260
+    ],
+    "hardBand": [
+      200,
+      290
+    ],
+    "words": "460-540",
+    "beats": "25-27 narrated",
+    "chapters": "7-9"
+  },
+  "phases": [
+    {
+      "id": "R1",
+      "name": "Collect",
+      "doc": "steps/1-collect.md",
+      "out": [
+        "release-manifest.json",
+        "release-notes.md"
+      ],
+      "script": "scripts/collect-release.mjs",
+      "gate": "confidence == high, range non-empty, fromTag is the expected tag",
+      "cost": "~30 s (plus a git fetch)"
+    },
+    {
+      "id": "R2",
+      "name": "Storyboard",
+      "doc": "steps/2-storyboard.md",
+      "prompts": [
+        "prompts/chapter-plan.md",
+        "prompts/release-narration.md"
+      ],
+      "out": [
+        "chapters.json",
+        "storyboard.json",
+        "budget.json",
+        "diagrams/*.mmd",
+        "diagrams/png/*.png"
+      ],
+      "gate": "beat 1 is kind:motivation in the reporter's/user's words from the release's own tickets (quote + reportedSymptom + affected + impact + narration; capture-beats.mjs refuses otherwise), then 7-9 chapters, 18-24 words/beat and 460-560 words total, planned total in 230-260 s, architecture beat before the first filmed beat, ERD for every chapter that touches the schema, every diagram rendered and looked at",
+      "cost": "~10 min (+2 min for the diagrams)"
+    },
+    {
+      "id": "R3",
+      "name": "Capture",
+      "doc": "steps/3-capture.md",
+      "reuses": "workflow-video-tour/steps/2-capture.md",
+      "script": "workflow-video-tour/scripts/capture-beats.mjs",
+      "out": [
+        "seg/*.mp4",
+        "timeline.json"
+      ],
+      "gate": "diagram contract passes (capture exits 2 otherwise), rect non-null on every filmed beat, still beats present with segment:null (cards and images), frame size == viewport",
+      "cost": "~20-25 min",
+      "checkpoints": "every 4-5 chapters; fix with --only, never a full re-run"
+    },
+    {
+      "id": "R4",
+      "name": "Narration",
+      "doc": "steps/4-narration.md",
+      "reuses": "workflow-video-tour/steps/3-narration.md",
+      "script": "workflow-video-tour/scripts/tts-qwen3.py",
+      "out": [
+        "tts/*.wav",
+        "budget.json#measuredS"
+      ],
+      "gate": "voice-identity.py >= 0.99 one speaker, measuredS inside the hard band",
+      "cost": "~10-15 min (26 beats, GPU)"
+    },
+    {
+      "id": "R5",
+      "name": "Assemble",
+      "doc": "steps/5-assemble.md",
+      "reuses": "workflow-video-tour/steps/4-assemble.md",
+      "script": "workflow-video-tour/scripts/compose-video.mjs",
+      "out": [
+        "<slug>.mp4",
+        "video.json",
+        "contact-sheet.png"
+      ],
+      "gate": "all beats in the printed table (cards, diagram stills, filmed beats), durationS within 10 s of measuredS, contact sheet looked at (boxes on the right element, diagrams readable at 1600x900)",
+      "cost": "~5-10 min"
+    },
+    {
+      "id": "R6",
+      "name": "Avatar + music",
+      "doc": "steps/6-avatar-music.md",
+      "reuses": [
+        "workflow-video-tour/steps/5-avatar.md",
+        "workflow-video-tour/steps/6-music.md"
+      ],
+      "scripts": [
+        "scripts/avatar-overlay-ranges.sh"
+      ],
+      "out": [
+        "<slug>-final.mp4"
+      ],
+      "gate": "mascot on the cards and absent on the filmed beats; music licensed, long enough, and long-attributed",
+      "cost": "~10-15 min (26 beats of frames)"
+    },
+    {
+      "id": "R7",
+      "name": "Verify + publish",
+      "doc": "steps/7-verify-publish.md",
+      "reuses": "workflow-video-tour/steps/7-verify-attach.md",
+      "script": "workflow-video-tour/scripts/verify-video.sh + gh release upload/edit",
+      "out": [
+        "<slug>-chapters.txt",
+        "RUN.env",
+        "release asset"
+      ],
+      "gate": "verify OK, one silence, chapters use real headings, asset downloads 200/302",
+      "cost": "~5 min"
+    }
+  ],
+  "beat_order": [
+    "intro card",
+    "motivation (the problem this release answers, in the reporter's/user's words)",
+    "product architecture diagram",
+    "per chapter: divider, ERD (if the chapter touches the schema), filmed beats",
+    "close"
+  ],
+  "motivation_contract": {
+    "doc": "steps/2-storyboard.md + workflow-video-tour/steps/1-storyboard.md (\"The motivation beat\")",
+    "required": "beat 1 is kind:motivation, stating the problem this release answers in the words of the people who reported it (from the release manifest's issues/tickets, not a paraphrase into engineering language); it carries quote / reportedSymptom / affected / impact / narration",
+    "enforced_by": "workflow-video-tour/scripts/capture-beats.mjs (exit 2, no waiver)",
+    "rendered_by": "workflow-video-tour/scripts/compose-video.mjs (WHY THIS EXISTS card + verbatim quote + attribution)"
+  },
+  "diagram_contract": {
+    "doc": "workflow-video-tour/diagrams.md",
+    "required": "one architecture beat before the first filmed beat; one ERD per chapter that touches the data model, right after its divider; touchesDataModel: true on the storyboard",
+    "render": "workflow-video-tour/scripts/setup-mermaid.sh once, then workflow-video-tour/scripts/render-diagrams.mjs",
+    "enforced_by": "workflow-video-tour/scripts/capture-beats.mjs (exit 2; --allow-no-diagrams only on human say-so)"
+  }
+}

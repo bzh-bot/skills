@@ -1,0 +1,36 @@
+{
+  "skill": "workflow-video-tour",
+  "version": "1.3.0",
+  "loaded_by": "workflow-do-tour (phase P7.8, immediately after the P7 screenshot upload)",
+  "beat_order": ["intro card", "motivation (reporter's words, from the ticket)", "concept|architecture diagram", "erd (when touchesDataModel)", "before", "after", "guard", "close"],
+  "motivation_contract": {
+    "doc": "steps/1-storyboard.md (\"The motivation beat\")",
+    "required": "beat 1 is kind:motivation with quote / reportedSymptom / affected / impact / narration; the spoken line names the reported symptom, who is affected and the impact, in the ticket's own words",
+    "enforced_by": "scripts/capture-beats.mjs (exit 2, no waiver); compose-video.mjs warns if a timeline opens on technical detail",
+    "rendered_by": "scripts/compose-video.mjs — WHY THIS EXISTS chip + the verbatim quote + attribution"
+  },
+  "diagram_contract": {
+    "doc": "diagrams.md",
+    "required": "one concept/architecture diagram beat before the first filmed beat; one erd beat before the first BEFORE beat when touchesDataModel is true",
+    "source": "$VIDEO_DIR/diagrams/<beat-id>.mmd",
+    "render": "scripts/render-diagrams.mjs (mermaid-cli, pinned by scripts/setup-mermaid.sh)",
+    "enforced_by": "scripts/capture-beats.mjs (exit 2; --allow-no-diagrams only on human say-so)"
+  },
+  "agents": [
+    {
+      "agent": "tour",
+      "icon": "🎬",
+      "name": "Video Tour",
+      "stage": "tour",
+      "phases": [
+        { "id": "V1", "icon": "📝", "name": "Storyboard + Diagrams" },
+        { "id": "V2", "icon": "🎥", "name": "Screencast Capture" },
+        { "id": "V3", "icon": "🗣️", "name": "Narration" },
+        { "id": "V4", "icon": "🎞️", "name": "Assemble" },
+        { "id": "V5", "icon": "🧑‍🎤", "name": "Speaking Avatar" },
+        { "id": "V6", "icon": "🎵", "name": "Music Bed" },
+        { "id": "V7", "icon": "📎", "name": "Verify & Attach" }
+      ]
+    }
+  ]
+}

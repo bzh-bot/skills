@@ -1,0 +1,21 @@
+The narration voice: "AU engineer, brimming with energy".
+
+Synthetic — no human recording, no personal data. Produced 2026-09-30 by
+Qwen3-TTS 1.7B VoiceDesign (--mode design --stable, seed 1234) from this prompt:
+
+  An Australian male voice, low and deep but brimming with energy: fast, bright,
+  punchy delivery that stays in the low register. Warm, engaged, a little wry.
+  Like an engineer who is genuinely pleased with what he just shipped.
+
+Why a frozen reference instead of re-running design mode per video: design mode
+draws a NEW speaker on every call, so the six beats of a video come out as six
+different people. Measured on the PR-290 beats (LTAS cosine, see voice-identity.py):
+
+  design mode, one call per beat      0.9742 mean / 0.9450 worst  -> different speakers
+  clone mode from this reference      0.9970 mean / 0.9953 worst  -> one speaker
+  and each beat vs this reference     0.9929 mean                 -> the approved voice
+
+Regenerate only if the voice is being replaced: run design mode, LISTEN, then freeze
+the approved take here with its whisper transcript. Do not "improve" the reference
+without re-measuring — an expressive clip clones as an expressive delivery, which is
+what we want, but a *different* draw clones as a different voice.

@@ -1,0 +1,150 @@
+{
+  "_comment": "Worked example — the PR-290 (ABC-45, a worked feature) storyboard. Schema + rules: steps/1-storyboard.md; diagram rules: diagrams.md. Beat 1 is ALWAYS the motivation, in the reporter's words from the ticket (quote + reportedSymptom + affected + impact + narration); capture-beats.mjs refuses the storyboard without it or with it anywhere else, and refuses a generic/empty line. The intro card comes from .title/.subtitle; a static beat can carry heading/bullets/footer for a real summary card instead of one run-on caption. The two source:image beats are Mermaid diagrams rendered by scripts/render-diagrams.mjs — architecture first, then the ERD, both after the motivation and before the first BEFORE beat. A diagram beat's holdMs is ignored: it lives max(6, voice + 1.8) s.",
+  "title": "ABC-45 · PR #290",
+  "subtitle": "Email for every Stripe event",
+  "fps": 30,
+  "viewport": [
+    1600,
+    900
+  ],
+  "touchesDataModel": true,
+  "beats": [
+    {
+      "id": "m-motivation",
+      "kind": "motivation",
+      "source": "static",
+      "quote": "Every time a client pays by bank transfer, the invoice stays open and finance has no idea the money arrived.",
+      "reportedSymptom": "the invoice stays open and finance has no idea",
+      "affected": "the finance team",
+      "impact": "money sits unreconciled for days",
+      "reportedBy": "the finance lead",
+      "ticketUrl": "https://<site>.atlassian.net/browse/ABC-45",
+      "narration": "The finance team said it plainly: when a client pays by bank transfer, the invoice stays open, finance has no idea, and money sits unreconciled for days."
+    },
+    {
+      "id": "d1-architecture",
+      "source": "image",
+      "kind": "diagram",
+      "diagram": "architecture",
+      "mmd": "diagrams/d1-architecture.mmd",
+      "image": "diagrams/png/d1-architecture.png",
+      "caption": "ARCHITECTURE — org's own Stripe account → webhook → notification",
+      "narration": "Here is the shape of it: the product bills through its own Stripe account, Stripe calls our webhook, and the webhook is the only place this fix lives."
+    },
+    {
+      "id": "d2-erd",
+      "source": "image",
+      "kind": "diagram",
+      "diagram": "erd",
+      "mmd": "diagrams/d2-erd.mmd",
+      "image": "diagrams/png/d2-erd.png",
+      "caption": "DATA MODEL — invoice raises billing_notification rows",
+      "narration": "The change reads invoice, writes billing_notification, and keys the row on invoice_id. One event, one row — that is what makes a redelivery cheap to ignore."
+    },
+    {
+      "id": "b1-context",
+      "phase": "before",
+      "source": "app",
+      "route": "/invoices",
+      "readyText": "INV-001035",
+      "box": {
+        "mode": "row",
+        "text": "INV-001035"
+      },
+      "boxColor": "#EF4444",
+      "holdMs": 10000,
+      "caption": "INV-001035 · $5,000 · open — billed through the org's own Stripe account",
+      "narration": "the product lets a company bill its clients through its own Stripe account. This invoice is open and waiting to be paid. Stripe sends a webhook for every step of that payment."
+    },
+    {
+      "id": "b2-before-gap",
+      "phase": "before",
+      "source": "app",
+      "route": "/invoices",
+      "readyText": "INV-001035",
+      "box": {
+        "mode": "wide",
+        "text": "No billing notifications",
+        "minWidth": 320,
+        "minHeight": 140
+      },
+      "boxColor": "#EF4444",
+      "holdMs": 11000,
+      "click": {
+        "finder": "[...document.querySelectorAll('button.MuiIconButton-root')].find(e => (e.querySelector('svg path')?.getAttribute('d') || '').startsWith('M10.268'))"
+      },
+      "click2": {
+        "finder": "[...document.querySelectorAll('.MuiChip-root')].find(e => (e.innerText || '').trim() === 'Billing')"
+      },
+      "caption": "BEFORE — payment_intent.processing landed: pending, and Billing is empty",
+      "narration": "Here is one of the gaps. The client pays by bank transfer, the handler moves the invoice to pending, and nothing else happens. No email, nothing in the app."
+    },
+    {
+      "id": "b3-after-mail",
+      "phase": "after",
+      "source": "web",
+      "url": "http://127.0.0.1:55324",
+      "readyText": "Payment Pending from Initech",
+      "box": {
+        "mode": "selector",
+        "selector": "#nav-html"
+      },
+      "boxColor": "#22C55E",
+      "holdMs": 11000,
+      "click": {
+        "finder": "[...document.querySelectorAll('a')].find(e => e.innerText.includes('Payment Pending from Initech'))"
+      },
+      "caption": "AFTER — Payment Pending from Initech, delivered to owner@acme.com",
+      "narration": "With the fix the same event fires a new billing notification, by email and in app, naming the client, the amount, the invoice and the organization."
+    },
+    {
+      "id": "b4-after-bell",
+      "phase": "after",
+      "source": "app",
+      "route": "/dashboard",
+      "readyText": "Dashboard",
+      "box": {
+        "mode": "wide",
+        "text": "A bank transfer for invoice INV-001035",
+        "minWidth": 300,
+        "minHeight": 70
+      },
+      "boxColor": "#22C55E",
+      "holdMs": 10000,
+      "click": {
+        "finder": "[...document.querySelectorAll('button.MuiIconButton-root')].find(e => (e.querySelector('svg path')?.getAttribute('d') || '').startsWith('M10.268'))"
+      },
+      "caption": "AFTER — the same event in the app, linked to the invoice",
+      "narration": "In the app it is the same story: a billing notification linked straight to the invoice. The type is data driven, so it appears under Billing with no frontend change."
+    },
+    {
+      "id": "b5-guard",
+      "phase": "after",
+      "source": "web",
+      "url": "http://127.0.0.1:55324",
+      "readyText": "Payment Pending from Initech",
+      "box": {
+        "mode": "selector",
+        "selector": "a.row.message"
+      },
+      "boxColor": "#22C55E",
+      "holdMs": 8000,
+      "caption": "Redelivery guard — three more identical events, still one email",
+      "narration": "Webhooks get redelivered, so a new email risks a duplicate. Three more identical events, and the count is still one."
+    },
+    {
+      "id": "b6-close",
+      "phase": "after",
+      "source": "static",
+      "holdMs": 8000,
+      "narration": "One new notification type. One additive migration. No existing email touched. That is pull request two ninety.",
+      "heading": "What changed",
+      "bullets": [
+        "One new notification type",
+        "One additive migration",
+        "No existing email touched"
+      ],
+      "footer": "<github-org>/<repo> · ABC-45 · PR #290"
+    }
+  ]
+}
