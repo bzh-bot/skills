@@ -90,10 +90,10 @@ curl -sS -o /dev/null -w '%{http_code}\n' -u "$ATLASSIAN_USER_EMAIL:$CONFLUENCE_
 
 ### Jira over REST
 
-- **Search:** `GET /rest/api/3/search/jql` with **bounded** JQL — the legacy `/rest/api/3/search` is **410 Gone**, and an unbounded query (only `ORDER BY ...`) returns 400, so always include a restriction like `project = NVR` or `created >= -30d`.
+- **Search:** `GET /rest/api/3/search/jql` with **bounded** JQL — the legacy `/rest/api/3/search` is **410 Gone**, and an unbounded query (only `ORDER BY ...`) returns 400, so always include a restriction like `project = ABC` or `created >= -30d`.
   ```bash
   curl -sS -u "$ATLASSIAN_USER_EMAIL:$JIRA_TOKEN" \
-    "https://api.atlassian.com/ex/jira/$CLOUD_ID/rest/api/3/search/jql?jql=project%3DNVR%20ORDER%20BY%20created%20DESC&maxResults=10&fields=key,summary,status"
+    "https://api.atlassian.com/ex/jira/$CLOUD_ID/rest/api/3/search/jql?jql=project%3DABC%20ORDER%20BY%20created%20DESC&maxResults=10&fields=key,summary,status"
   ```
 - **Get issue:** `GET /rest/api/3/issue/<KEY>` (add `?fields=summary,status,description,...`).
 - **Add comment:** `POST /rest/api/3/issue/<KEY>/comment` with an ADF `{"body": { ... }}`.
@@ -139,7 +139,7 @@ Where `$ISSUE_ID` is the numeric Jira issue ID (not the key like `PROJ-123`, but
 
 ```bash
 curl -sS -u "$ATLASSIAN_USER_EMAIL:$JIRA_TOKEN" \
-  "https://$ATLASSIAN_SITE/rest/api/3/search/jql?jql=project%3DNVR%20ORDER%20BY%20cf%5B10600%5D%20ASC&maxResults=100&fields=key,summary" \
+  "https://$ATLASSIAN_SITE/rest/api/3/search/jql?jql=project%3DABC%20ORDER%20BY%20cf%5B10600%5D%20ASC&maxResults=100&fields=key,summary" \
   | jq -r '.issues[] | "\(.key)\t\(.id)"'
 ```
 
@@ -201,7 +201,7 @@ If neither file exists:
 Never hardcode these values:
 
 - Jira cloud/site URL (or cloudId)
-- Jira project key (for example, `NVR`)
+- Jira project key (for example, `ABC`)
 - Optional project conventions (for example, story-point defaults)
 
 ## Atlassian Usage Guidance
@@ -229,14 +229,14 @@ atlassian searchJiraIssuesUsingJql --cloud-id "<cloud-id>" --jql '<JQL>'
 
 `labels = <value>` matches issues that **contain** the label (issues can have multiple labels). The match is case-insensitive. For multiple distinct label names, use `labels in (...)`.
 
-- Has label: `labels = Arlington`
-- Has either of multiple labels: `labels in (Arlington, boston)`
-- Has both labels: `labels = Arlington AND labels = urgent`
-- Label + project + status: `project = NVR AND labels = Arlington AND status = "To Do"`
+- Has label: `labels = <label>`
+- Has either of multiple labels: `labels in (<label-a>, <label-b>)`
+- Has both labels: `labels = <label-a> AND labels = <label-b>`
+- Label + project + status: `project = ABC AND labels = <label> AND status = "To Do"`
 
 **Tips:**
 
-- Jira's `labels` operator is case-insensitive: `labels = arlington` matches the `Arlington` label. Use `labels in (...)` to match multiple distinct label names (not casing variants).
+- Jira's `labels` operator is case-insensitive: `labels = <label>` matches `<Label>` too. Use `labels in (...)` to match multiple distinct label names (not casing variants).
 - Use `--fields` to limit returned fields and reduce response size: `--fields summary,status,labels`
 - Use `--max-results` to control page size (default 10, max 100). For paginated results, pass `--next-page-token` from the previous response.
 
@@ -246,7 +246,7 @@ Each expression below is a `--jql` argument value.
 
 - Text in summary/description: `text ~ "discharge bug"`
 - My issues: `assignee = currentUser()`
-- Bugs in a project: `issuetype = Bug AND project = NVR`
+- Bugs in a project: `issuetype = Bug AND project = ABC`
 - Recently created: `created >= -7d ORDER BY created DESC`
 
 ---
@@ -390,7 +390,7 @@ When the MCP tool is available, use markdown formatting (not wiki formatting):
 ```bash
 atlassian createJiraIssue \
   --cloud-id "<cloud-id>" \
-  --project-key "NVR" \
+  --project-key "ABC" \
   --issue-type-name "Subtask" \
   --summary "My subtask" \
   --description "Description here" \
