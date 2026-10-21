@@ -475,53 +475,36 @@ ensureScreenshotsDir('run start-up')
 // ── org gate (step 0 — the run is always scoped to one org) ────────────────
 // cage() exports WORKFLOW_ORG (chief-of-staff kickoff resolves it from the ticket/repo
 // remote vs org-config.json githubOrg entries). The script re-reads the
-// the registry mapping each run (chrome_user_data_dir + keepass_db) and exports
+// the registry mapping each run (chrome_user_data_dir + vault) and exports
 // CHROME_USER_DATA_DIR for later stages. Inside the cage gdrive is NOT mounted,
-// so cage()'s exported env vars are authoritative; the sqlite read is the
-// host/dry-run path (with /tmp-copy fallback for rclone disk I/O errors).
-async function sqliteRead(sql: string): Promise<string> {
-  const tdb = `${process.env.HOME}/gdrive/sqlite/the registry`
-  const tryDb = async (path: string): Promise<string> => {
-    try {
-      const { stdout } = await run(['sqlite3', path, sql])
-      return stdout.trim()
-    } catch {
-      return ''
-    }
+// so cage()'s exported env vars are authoritative; the CLI read is the host/dry-run path.
+// The org registry is plain JSON under $TRIAGE_DIR; read it through the `triage`
+// CLI so this script never depends on the storage format. Inside the cage the
+// registry may be unreachable — cage()'s exported env vars are then authoritative.
+type RegistryOrg = { org: string; tag?: string | null; chrome_user_data_dir?: string | null; vault?: string | null; ledger_url?: string | null }
+async function readRegistry(): Promise<RegistryOrg[]> {
+  try {
+    const { stdout } = await run(['triage', 'orgs', '--json'])
+    const parsed = JSON.parse(stdout || '[]')
+    return Array.isArray(parsed) ? parsed as RegistryOrg[] : []
+  } catch {
+    return []
   }
-  let out = await tryDb(tdb)
-  if (!out) {
-    const tmp = `/tmp/triage-wfdo-${process.pid}.db`
-    try {
-      await run(['cp', tdb, tmp])
-      out = await tryDb(tmp)
-    } catch {
-      /* gdrive not mounted (inside cage) — env vars are authoritative */
-    }
-    try {
-      await run(['rm', '-f', tmp])
-    } catch {
-      /* best effort */
-    }
-  }
-  return out
 }
 async function readKnownOrgs(): Promise<string[]> {
-  const out = await sqliteRead('SELECT name FROM orgs;')
-  return out ? out.split('\n').map(s => s.trim()).filter(Boolean) : []
+  const rows = await readRegistry()
+  return rows.map(r => r.org).filter(Boolean)
 }
-async function readOrgRow(org: string): Promise<{ chrome: string; keepass: string } | null> {
-  const row = await sqliteRead(
-    `SELECT COALESCE(chrome_user_data_dir,'')||'|'||COALESCE(keepass_db,'') FROM orgs WHERE name='${org}';`,
-  )
+async function readOrgRow(org: string): Promise<{ chrome: string; vault: string } | null> {
+  const rows = await readRegistry()
+  const row = rows.find(r => r.org === org)
   if (!row) return null
-  const [chrome = '', keepass = ''] = row.split('|')
-  return { chrome, keepass }
+  return { chrome: row.chrome_user_data_dir ?? '', vault: row.vault ?? '' }
 }
 
 const WORKFLOW_ORG = process.env.WORKFLOW_ORG ?? ''
 if (dryRun) {
-  console.log(`org gate: WORKFLOW_ORG=${WORKFLOW_ORG || '<missing>'}  CHROME_USER_DATA_DIR=${process.env.CHROME_USER_DATA_DIR || '<unset>'}  KEEPASS_DB=${process.env.KEEPASS_DB || '<unset>'}`)
+  console.log(`org gate: WORKFLOW_ORG=${WORKFLOW_ORG || '<missing>'}  CHROME_USER_DATA_DIR=${process.env.CHROME_USER_DATA_DIR || '<unset>'}  VAULT_PATH=${process.env.VAULT_PATH || '<unset>'}`)
 } else if (!WORKFLOW_ORG) {
   appendState(RUN_ENV, { ORG_PENDING: '1' })
   await fail(
@@ -550,12 +533,12 @@ if (dryRun) {
   const row = await readOrgRow(WORKFLOW_ORG)
   process.env.CHROME_USER_DATA_DIR ||= (
     process.env.WORKFLOW_CONTAINER_ID
-      ? '$HOME/chrome-org'
-      : row?.chrome || `${process.env.HOME}/secrets/${WORKFLOW_ORG}/chrome-user-data-dir`
+      ? `${process.env.HOME}/chrome-org`
+      : row?.chrome || ''
   )
-  const keepass = process.env.KEEPASS_DB || row?.keepass || ''
-  log(`🏢 run org: ${WORKFLOW_ORG} — chrome profile: ${process.env.CHROME_USER_DATA_DIR} · keepass: ${keepass || 'none'} · secrets-org: $HOME/secrets-org`)
-  appendState(RUN_ENV, { WORKFLOW_ORG, CHROME_USER_DATA_DIR: process.env.CHROME_USER_DATA_DIR, KEEPASS_DB: keepass })
+  const vault = process.env.VAULT_PATH || row?.vault || ''
+  log(`🏢 run org: ${WORKFLOW_ORG} — chrome profile: ${process.env.CHROME_USER_DATA_DIR} · vault: ${vault || 'none'} · org config: $ORG_CONFIG_DIR`)
+  appendState(RUN_ENV, { WORKFLOW_ORG, CHROME_USER_DATA_DIR: process.env.CHROME_USER_DATA_DIR, VAULT_PATH: vault })
 }
 
 // ── script-owned context detection (v8 — authoritative; agents read run env) ──
@@ -1795,7 +1778,7 @@ function discoverPiFrontendUrl(): string {
 async function launchChromePane(force = false): Promise<void> {
   if (!force && (chromePaneLaunched || runVar('CHROME_LAUNCHED') === '1')) return
   chromePaneLaunched = true
-  const chromeDir = process.env.CHROME_USER_DATA_DIR || '$HOME/chrome-org'
+  const chromeDir = process.env.CHROME_USER_DATA_DIR || `${process.env.HOME ?? ''}/chrome-org`
   // Per-session profile COPY (parallel cages share one source profile; two Chromes on
   // one user-data-dir fight over SingletonLock). XDG_DATA_HOME must be writable in-cage
   // (~/.local/share is root-owned there).
