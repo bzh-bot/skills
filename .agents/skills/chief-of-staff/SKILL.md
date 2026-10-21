@@ -8,6 +8,10 @@ description: >
   accounts exist and how to read them from a plain-JSON registry, so nothing is
   hardcoded per organisation. Run on demand; there are no cadences.
 
+  Trigger on "chief of staff" or on a flow word: inbox / email triage, chat,
+  calendar, ticket board, monitoring, accounting / bank reconciliation, snapshot
+  ("what's on my plate"), goals / break down, kick off / work kickoff, update pi.
+
   Requires, before first use: a seeded registry ($TRIAGE_DIR), an org-config
   file ($ORG_CONFIG), a Chrome started with --remote-debugging-port=9222, a
   zellij session whose panes can reach pi-intercom, and a task queue for the

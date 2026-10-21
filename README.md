@@ -71,6 +71,16 @@ reads the registry). It ships the orchestrator, not the readers.
 
 **Utility** — `workflow-flightplan`, `workflow-groceries`, `workflow-update-deps`.
 
+## Runtime notes
+
+Everything is bash + jq except two places that ship Python because the job needs a real
+parser or client: `workflow-video-tour/scripts/*.py` (TTS engines and avatar rendering) and
+`triage-bank-account/scripts/backend_connect.py` (an XML-RPC client for the accounting
+backend). Both are opt-in: nothing else imports them.
+
+Other external commands the skills assume you have: `agent-browser`, `gh`, `docker`,
+`zellij`, `node`, `ffmpeg`, `jq`, `pi`.
+
 ## Writing one
 
 1. One job per skill. If the description needs "and", it is two skills.
