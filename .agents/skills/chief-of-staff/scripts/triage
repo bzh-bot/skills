@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# triage — read/patch the plain-JSON accounts registry. No python, no sqlite.
+#
+# Registry root: $TRIAGE_DIR (default ~/secrets/mendeljacks/triage), holding
+#   orgs.json        {"<org>": {tag, chrome_user_data_dir, vault, ledger_url}}
+#   platforms.json   {"<platform>": {reader_skill, item_type}}
+#   accounts/<org>.json  [ {platform, identifier, reader_skill, enabled, notes} ]
+#   banks/<org>.json     [ {name, journal_id, currency, ownership, minimum_balance, notes} ]
+#   state.json       {"accounts": {"<org>/<platform>/<id>": "<iso8601>"}, "banks": {...}}
+#
+# Usage:
+#   triage orgs | platforms
+#   triage accounts [--org O] [--platform P] [--disabled] [--json]
+#   triage banks [--org O] [--json]
+#   triage get ORG
+#   triage ledger ORG
+#   triage due [--days N] [--kind accounts|banks] [--json]
+#   triage swept KEY [--at ISO8601]
+#
+# Requires: bash, jq. Files may carry a leading /* comment */ line.
+set -euo pipefail
+
+ROOT="${TRIAGE_DIR:-$HOME/secrets/mendeljacks/triage}"
+
+die() { printf '%s\n' "$*" >&2; exit 1; }
+command -v jq >/dev/null || die "triage: jq is required"
+
+# json <file> — cat a registry file with any leading /* comment */ stripped
+json() {
+  local f="$1"
+  [ -f "$f" ] || { printf '{}'; return; }
+  sed '1s@^/\*.*\*/@@' "$f" | jq -c '.' 2>/dev/null || printf '{}'
+}
+
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+
+cmd_orgs() {
+  json "$ROOT/orgs.json" |
+    jq -r 'to_entries[] | [.key, (.value.tag // "-"), (.value.chrome_user_data_dir // "-"),
+                          (.value.vault // "-"), (.value.ledger_url // "-")] | @tsv'
+}
+
+cmd_platforms() {
+  json "$ROOT/platforms.json" |
+    jq -r 'to_entries[] | [.key, (.value.item_type // "-"), (.value.reader_skill // "-")] | @tsv'
+}
+
+collect_accounts() { # prints a JSON array with org merged in
+  local org filter="$1"
+  local out='[]'
+  for f in "$ROOT"/accounts/*.json; do
+    [ -f "$f" ] || continue
+    org="$(basename "$f" .json)"
+    [ -n "$filter" ] && [ "$org" != "$filter" ] && continue
+    out=$(jq -cn --arg org "$org" --argjson acc "$(json "$f")" --argjson prev "$out" \
+          '$acc | map(. + {org: $org}) | . + $prev')
+  done
+  printf '%s' "$out"
+}
+
+cmd_accounts() {
+  local org="" platform="" jsonout=0 show_disabled=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --org) org="$2"; shift 2 ;;
+      --platform) platform="$2"; shift 2 ;;
+      --disabled) show_disabled=1; shift ;;
+      --json) jsonout=1; shift ;;
+      *) die "accounts: unknown option $1" ;;
+    esac
+  done
+  local rows; rows="$(collect_accounts "$org")"
+  rows="$(jq -c --arg p "$platform" --argjson sd "$show_disabled" \
+    '[.[] | select(($p == "") or (.platform == $p)) | select(($sd == 1) or (.enabled != false))]' <<<"$rows")"
+  if [ "$jsonout" = 1 ]; then
+    jq '.' <<<"$rows"
+  else
+    printf '%s account(s)\n' "$(jq 'length' <<<"$rows")"
+    jq -r '.[] | [.org, .platform, (.identifier // "-"), (.reader_skill // "-"),
+                  (if .enabled == false then "disabled" else "enabled" end)] | @tsv' <<<"$rows"
+  fi
+}
+
+cmd_banks() {
+  local org="" jsonout=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --org) org="$2"; shift 2 ;;
+      --json) jsonout=1; shift ;;
+      *) die "banks: unknown option $1" ;;
+    esac
+  done
+  local out='[]'
+  for f in "$ROOT"/banks/*.json; do
+    [ -f "$f" ] || continue
+    local o; o="$(basename "$f" .json)"
+    [ -n "$org" ] && [ "$o" != "$org" ] && continue
+    out=$(jq -cn --arg org "$o" --argjson b "$(json "$f")" --argjson prev "$out" \
+          '$b | map(. + {org: $org}) | . + $prev')
+  done
+  if [ "$jsonout" = 1 ]; then
+    jq '.' <<<"$out"
+  else
+    printf '%s bank account(s)\n' "$(jq 'length' <<<"$out")"
+    jq -r '.[] | [.org, .name, (.currency // "-"), (.ownership // "-"),
+                  (.minimum_balance // "-"), (.journal_id // "-")] | @tsv' <<<"$out"
+  fi
+}
+
+cmd_get() {
+  local org="${1:?usage: triage get ORG}"
+  local meta; meta="$(json "$ROOT/orgs.json" | jq -c --arg o "$org" '.[$o] // empty')"
+  [ -n "$meta" ] || die "no such org: $org"
+  jq -r --arg o "$org" '"[\($o)] tag=\(.tag // "-") chrome=\(.chrome_user_data_dir // "-")"' <<<"$meta"
+  jq -r 'if .vault then "  vault: \(.vault)" else empty end,
+         if .ledger_url then "  ledger: \(.ledger_url)" else empty end' <<<"$meta"
+  local acc; acc="$(collect_accounts "$org")"
+  printf '  accounts (%s):\n' "$(jq 'length' <<<"$acc")"
+  jq -r '.[] | "    - \(.platform)\t\(.reader_skill // "-")\t\(.identifier // "-")"' <<<"$acc"
+  local bnk; bnk="$(cmd_banks --org "$org" --json)"
+  local n; n="$(jq 'length' <<<"$bnk")"
+  [ "$n" -gt 0 ] && {
+    printf '  bank accounts (%s):\n' "$n"
+    jq -r '.[] | "    - \(.name) (\(.currency // "-"), \(.ownership // "-"))"' <<<"$bnk"
+  }
+  return 0
+}
+
+cmd_ledger() {
+  local org="${1:?usage: triage ledger ORG}"
+  local url; url="$(json "$ROOT/orgs.json" | jq -r --arg o "$org" '.[$o].ledger_url // empty')"
+  [ -n "$url" ] || die "no ledger_url for org: $org"
+  printf '%s\n' "$url"
+}
+
+cmd_due() {
+  local days=7 kind=accounts jsonout=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --days) days="$2"; shift 2 ;;
+      --kind) kind="$2"; shift 2 ;;
+      --json) jsonout=1; shift ;;
+      *) die "due: unknown option $1" ;;
+    esac
+  done
+  local cutoff; cutoff="$(date -u -d "-${days} days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-"${days}"d +%Y-%m-%dT%H:%M:%SZ)"
+  local seen; seen="$(json "$ROOT/state.json" | jq -c --arg k "$kind" '.[$k] // {}')"
+  local rows
+  if [ "$kind" = accounts ]; then
+    rows="$(collect_accounts "" | jq -c '[.[] | select(.enabled != false)]')"
+  else
+    rows="$(cmd_banks --json)"
+  fi
+  local out
+  out="$(jq -c --argjson seen "$seen" --arg cutoff "$cutoff" --arg kind "$kind" '
+    [ .[] as $r
+      | (if $kind == "accounts"
+         then "\($r.org)/\($r.platform)/\($r.identifier // "-")"
+         else "\($r.org)/\($r.name)" end) as $key
+      | ($seen[$key] // null) as $at
+      | select(($at // "") == "" or $at < $cutoff)
+      | {key: $key, last_swept_at: ($at // "never")} ]' <<<"$rows")"
+  if [ "$jsonout" = 1 ]; then
+    jq '.' <<<"$out"
+  else
+    printf '%s %s not swept in %sd\n' "$(jq 'length' <<<"$out")" "$kind" "$days"
+    jq -r '.[] | [.key, .last_swept_at] | @tsv' <<<"$out"
+  fi
+}
+
+cmd_swept() {
+  local key="" at=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --at) at="$2"; shift 2 ;;
+      -*) die "swept: unknown option $1" ;;
+      *) key="$1"; shift ;;
+    esac
+  done
+  [ -n "$key" ] || die "usage: triage swept KEY [--at ISO8601]"
+  [ -n "$at" ] || at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local state; state="$(json "$ROOT/state.json")"
+  # banks keys are "org/name"; accounts keys have three segments
+  local section="accounts"
+  if jq -e --arg k "$key" '.["banks"] // {} | has($k)' <<<"$state" >/dev/null 2>&1; then section="banks"; fi
+  state="$(jq -c --arg k "$key" --arg v "$at" --arg s "$section" '.[$s] = ((.[$s] // {}) + {($k): $v})' <<<"$state")"
+  {
+    printf '/* Sweep timestamps only; safe to regenerate. */\n'
+    jq '.' <<<"$state"
+  } > "$ROOT/state.json"
+  printf '%s: %s -> %s\n' "$section" "$key" "$at"
+}
+
+case "${1:-}" in
+  orgs) shift; cmd_orgs "$@" ;;
+  platforms) shift; cmd_platforms "$@" ;;
+  accounts) shift; cmd_accounts "$@" ;;
+  banks) shift; cmd_banks "$@" ;;
+  get) shift; cmd_get "$@" ;;
+  ledger) shift; cmd_ledger "$@" ;;
+  due) shift; cmd_due "$@" ;;
+  swept) shift; cmd_swept "$@" ;;
+  ""|-h|--help|help) usage ;;
+  *) die "unknown command: $1 (try --help)" ;;
+esac
