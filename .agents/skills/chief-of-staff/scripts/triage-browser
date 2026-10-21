@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+# triage-browser — shared-instance, labeled-tab browser orchestration for router walks.
+#
+# Usage:
+#   triage-browser banks                     # attach to the user's live Chrome — NO tabs opened
+#   triage-browser inboxes                   # same for triage (inbox/chat/calendar/...) accounts
+#   triage-browser account banks <id>        # open ONE bank tab lazily, just before its worker starts
+#   triage-browser account inboxes <id>      # same for ONE triage account
+#   triage-browser close banks               # sweep leftover labeled walk tabs (NEVER the user's browser)
+#   triage-browser close inboxes
+#
+# Model (user directive 2026-09-07: attach to the user's live Chrome — the mj
+# browser — via auto-connect; 2026-09-14: open account tabs LAZILY, one at a
+# time when the walk reaches the account — never all up front):
+# - The walk attaches to the user's ALREADY-OPEN Chrome (remote debugging via
+#   the ~/.agent-browser/chrome bind mount of the real profile) with
+#   --auto-connect. All their logins are already there — no re-login step.
+# - The start call (banks|inboxes) opens NOTHING — it only confirms the attach
+#   and prints the worker binding template.
+# - When the walk reaches an account, `triage-browser account <flow> <id>`
+#   opens exactly that ONE account page as its own labeled tab
+#   (`tab new --label <slug> <url>`) under the worker session
+#   (triage-<flow>-<label>). Accounts without a url: note are reported as such
+#   — their worker opens its own target in its own pinned tab. These walk tabs
+#   are ours; every other tab in the user's browser is sacrosanct — never
+#   closed, never navigated.
+# - Per-account workers target ONLY their own labeled pinned tab:
+#     agent-browser --auto-connect --session triage-<flow>-<label> --pin-tab tab <label>
+#   ...then run all commands with the same --session/--pin-tab flags.
+#   Never touch any other tab; never command the active/unnamed tab.
+# - When an account is done, the worker closes exactly its tab: `tab close <label>`.
+# - `close` closes ONLY the labeled walk tabs — it NEVER closes or quits the
+#   user's browser and NEVER touches their other tabs.
+set -euo pipefail
+
+usage() {
+  sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
+  exit "${1:-0}"
+}
+
+[[ $# -ge 1 ]] || usage 1
+CMD="$1"; shift || true
+case "$CMD" in
+  banks|inboxes) FLOW="$CMD"; ACTION="ensure" ;;
+  close) [[ $# -ge 1 ]] || usage 1; FLOW="$1"; ACTION="close" ;;
+  account)
+    [[ $# -ge 2 ]] || usage 1
+    FLOW="$1"; ACCOUNT_ID="$2"; ACTION="account"
+    ;;
+  -h|--help|help) usage 0 ;;
+  *) usage 1 ;;
+esac
+
+SESSION="triage-$FLOW"
+
+# The registry is plain JSON; read it through the triage CLI so this script
+# never needs to know the layout.
+TRIAGE="${TRIAGE_BIN:-triage}"
+
+slug() {
+  tr '[:upper:]' '[:lower:]' <<<"$1" | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+}
+
+note_field() { # note_field <notes> <key>  -> value of "key: value;" pair
+  sed -n -E "s/.*(^|;[[:space:]]*)$2:[[:space:]]*([^;]+).*/\\2/p" <<<"$1" | tail -1 | sed -E 's/[[:space:]]+$//'
+}
+
+ab() { # ab <args...> — attach to the user's live Chrome under the walk session
+  agent-browser --auto-connect --session "$SESSION" "$@"
+}
+
+ensure_attached() { # verifies the user's live Chrome is reachable via auto-connect
+  if ! ab tab list >/dev/null 2>&1; then
+    echo "ERROR: cannot attach to your live Chrome (auto-connect failed)." >&2
+    echo "       Open your Chrome launcher that carries --remote-debugging-port=9222 and rerun." >&2
+    exit 1
+  fi
+}
+
+load_rows() {
+  if [[ "$FLOW" == "banks" ]]; then
+    "$TRIAGE" banks --json 2>/dev/null \
+      | jq -c '[.[] | {id: (.journal_id // .name), label_src: .name, notes: (.notes // "")}]' \
+      || echo '[]'
+  else
+    "$TRIAGE" accounts --json 2>/dev/null \
+      | jq -c '[.[] | select(.identifier != null)
+                | {id: .identifier, label_src: (.org + "/" + .platform), notes: (.notes // "")}]' \
+      || echo '[]'
+  fi
+}
+
+tab_labels() { # existing labels, one per line
+  ab tab list --json 2>/dev/null | jq -r '.tabs[]?.label // empty' 2>/dev/null || true
+}
+
+# The banks walk needs the accounting backend open alongside the bank tabs (the
+# workers reconcile against it) — ONE shared labelled tab, ensured lazily on the
+# first bank account open. Its URL comes from the registry (`triage ledger <org>`),
+# never from a variable baked into this script. Workers use it, never close it
+# (the close sweep owns it).
+ensure_ledger_tab() {
+  if [[ "$FLOW" == "banks" ]]; then
+    local org ledger_url
+    org="${LEDGER_ORG:-$(printf '%s' "${1:-}" | cut -d/ -f1)}"
+    ledger_url="$("$TRIAGE" ledger "$org" 2>/dev/null || true)"
+    if [[ -z "$ledger_url" ]]; then
+      echo "  SKIP  accounting tab — no ledger_url for org '$org' in the registry"
+      return 0
+    fi
+    if ! grep -qx "ledger" <<<"$(agent-browser --auto-connect --session "$SESSION-ledger" tab list --json 2>/dev/null | jq -r '.tabs[]?.label // empty' 2>/dev/null)"; then
+      agent-browser --auto-connect --session "$SESSION-ledger" tab new --label "ledger" "$ledger_url" >/dev/null
+      echo "  OPEN  tab 'ledger' -> $ledger_url (shared reconciliation backend, session $SESSION-ledger — workers never close it)"
+    else
+      echo "  REUSE tab 'ledger' (already open)"
+    fi
+  fi
+}
+
+ensure_walk() { # start action: confirm the designated instance — NO tabs opened
+  ensure_attached
+  echo "INSTANCE: your live Chrome (auto-connect, default profile) — user-authorized attach"
+  echo "SESSION: $SESSION (workers use $SESSION-<label>, pinned to their tab)"
+  echo "NO account tabs are opened up front (user directive 2026-09-14) — open each"
+  echo "one lazily, just before its worker starts:  $0 account $FLOW <accountId>"
+  echo "User: your logins in this browser carry over — sign in on a tab only if its worker asks."
+  echo "Worker binding for a tab label <label> (explicit session + pinned tab):"
+  echo "  agent-browser --auto-connect --session $SESSION-<label> --pin-tab tab <label>"
+  echo "  # then EVERY browser command: agent-browser --auto-connect --session $SESSION-<label> --pin-tab ..."
+  echo "Worker cleanup when the account is done: tab close <label>  (that tab only)."
+  echo "Walk teardown when fully done: $0 close $FLOW  (sweeps leftover labeled walk tabs)"
+}
+
+open_account_tab() { # account action: open ONE account tab, lazily, just-in-time
+  ensure_attached
+  local row id label_src notes url label found=""
+  local rows; rows="$(load_rows)"
+  local -A seen=()
+  # Same label derivation as the close sweep (slug of org/platform; later
+  # collisions get -<id>) so open and close always agree on the label.
+  while read -r row; do
+    [[ -n "$row" ]] || continue
+    id=$(jq -r '.id' <<<"$row"); label_src=$(jq -r '.label_src' <<<"$row")
+    label="$(slug "$label_src")"
+    if [[ -n "${seen[$label]:-}" ]]; then label="$label-$id"; fi
+    seen[$label]=1
+    if [[ "$id" == "$ACCOUNT_ID" ]]; then found="$row"; break; fi
+  done < <(jq -c '.[]' <<<"$rows")
+  if [[ -z "$found" ]]; then
+    echo "ERROR: no $FLOW account id $ACCOUNT_ID in the registry." >&2
+    exit 1
+  fi
+  notes=$(jq -r '.notes // ""' <<<"$found")
+  url=$(note_field "$notes" url)
+  if [[ -z "$url" ]]; then
+    echo "ACCOUNT id $ACCOUNT_ID: no url in notes — the worker opens its own target in its own pinned tab."
+  elif grep -qx "$label" <<<"$(agent-browser --auto-connect --session "$SESSION-$label" tab list --json 2>/dev/null | jq -r '.tabs[]?.label // empty' 2>/dev/null)"; then
+    echo "  REUSE tab '$label' -> $url (account id $ACCOUNT_ID, already open under session $SESSION-$label)"
+  else
+    # Labels are SESSION-scoped in agent-browser — open the tab under THAT
+    # WORKER's session (triage-<flow>-<label>) so the label is visible to the
+    # worker that binds with --session triage-<flow>-<label> --pin-tab tab <label>.
+    agent-browser --auto-connect --session "$SESSION-$label" tab new --label "$label" "$url" >/dev/null
+    echo "  OPEN  tab '$label' -> $url (account id $ACCOUNT_ID, opened under worker session $SESSION-$label)"
+  fi
+  ensure_ledger_tab
+  echo "Worker binding: agent-browser --auto-connect --session $SESSION-$label --pin-tab tab $label"
+}
+
+close_tabs() {
+  ensure_attached
+  local existing; existing="$(tab_labels)"
+  local -A seen=()
+  local rows; rows="$(load_rows)"
+  local id label_src label count=0
+  while read -r row; do
+    [[ -n "$row" ]] || continue
+    id=$(jq -r '.id' <<<"$row"); label_src=$(jq -r '.label_src' <<<"$row")
+    label="$(slug "$label_src")"
+    if [[ -n "${seen[$label]:-}" ]]; then label="$label-$id"; fi
+    seen[$label]=1
+    if grep -qx "$label" <<<"$existing"; then
+      # close via the account's worker session (that is where the label lives)
+      agent-browser --auto-connect --session "$SESSION-$label" tab close "$label" >/dev/null
+      echo "  closed tab '$label'"
+      count=$((count+1))
+    fi
+  done < <(jq -c '.[]' <<<"$rows")
+  # also close the shared ledger tab on the banks walk
+  if [[ "$FLOW" == "banks" ]] && grep -qx "ledger" <<<"$existing"; then
+    agent-browser --auto-connect --session "$SESSION-ledger" tab close "ledger" >/dev/null && echo "  closed tab 'ledger'" && count=$((count+1))
+  fi
+  # NEVER close or quit the user's browser — this is their live Chrome. We only
+  # ever close the labeled walk tabs above.
+  echo "Walk '$SESSION' ended: $count walk tab(s) closed. Your browser and all other tabs untouched."
+}
+
+case "$ACTION" in
+  ensure)  ensure_walk ;;
+  account) open_account_tab ;;
+  close)   close_tabs ;;
+esac
