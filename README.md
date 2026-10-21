@@ -34,8 +34,18 @@ ships credentials; these are the names they expect:
 | `CLICKUP_TOKEN`, `SLACK_*`, `NOTION_API_TOKEN`, `TICKTICK_TOKEN` | the matching integrations | API credentials |
 | `OPENROUTER_API_KEY` (or your provider's) | anything calling a model | provider key |
 
-The registry shape is documented in `chief-of-staff/SKILL.md`; `triage` reads it
-(`triage orgs`, `triage accounts --json`, `triage due --days 7`).
+The registry shape is documented in `chief-of-staff/SKILL.md`. It is read with the
+`triage` CLI shipped in `chief-of-staff/scripts/triage` (bash + jq only — no python,
+no sqlite):
+
+```sh
+ln -s ~/src/skills/.agents/skills/chief-of-staff/scripts/triage ~/.local/bin/triage
+triage orgs                 # org -> tag, chrome profile, vault, ledger url
+triage accounts --json      # every enabled account
+triage get <org>            # one org in full
+triage due --days 7         # what has not been swept
+triage swept <key>          # stamp state.json
+```
 
 ## The skills
 
