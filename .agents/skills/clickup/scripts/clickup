@@ -1,0 +1,483 @@
+#!/usr/bin/env python3
+"""clickup — ClickUp CLI over REST API v2 with a personal API token.
+
+An MCP server is not used: CLICKUP_TOKEN is the single credential and this CLI is
+the single entry point. Reasons: the MCP cannot write Sprint Points,
+its OAuth token is scoped to mcp.clickup.com (401 against api.clickup.com), and
+one plain CLI is easier for agents to call than a codemode round-trip.
+
+Token lookup order: $CLICKUP_TOKEN, $CLICKUP_API_TOKEN, then $CLICKUP_ENV_FILE
+or ~/.config/clickup.env — accepting `CLICKUP_TOKEN=`/`CLICKUP_API_TOKEN=`,
+quoted or with a leading `export `.
+
+Usage
+  clickup me
+  clickup hierarchy [--space-id ID]
+  clickup list <list_id>                     # name + valid statuses
+  clickup fields --space ID | --folder ID | --list ID
+  clickup members
+  clickup tasks [--list ID] [--space ID] [--folder ID] [--assignee me|ID]
+                [--status NAME] [--include-closed] [--limit N]
+  clickup get <task_id> [--json] [--description]
+  clickup update <task_id> [--name N] [--status S] [--assignee me|ID]...
+                [--priority urgent|high|normal|low|none] [--due DATE]
+                [--start DATE] [--points N|none] [--description MD]
+                [--append-description MD] [--custom-field ID=VALUE]...
+  clickup create --list LIST_ID --name NAME [--description MD] [--status S]
+                [--assignee me|ID]... [--priority P] [--points N]
+                [--custom-field ID=VALUE]...
+  clickup comment <task_id> TEXT            # markdown; use bare URLs
+  clickup comments <task_id>
+  clickup attach <task_id> FILE
+  clickup delete <task_id>
+
+Notes
+  * --assignee REPLACES the assignee set (the API replaces, it does not add).
+  * --description REPLACES the whole description; --append-description reads the
+    current markdown, appends, and writes it back.
+  * custom fields: pass the field UUID and a value — a dropdown takes the option
+    UUID, a checkbox true/false, a people field '{"add":["<user id>"]}', a labels
+    field '["<option uuid>"]'. Applied through POST /task/{id}/field/{id} because
+    the create/update body silently ignores custom_fields. See the skill's field
+    inventory.
+  * Sprint Points is ClickUp's built-in `points` (not a custom field, not
+    time_estimate). `clickup update <id> --points 3`.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as _dt
+import json
+import mimetypes
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+
+API = "https://api.clickup.com/api/v2"
+DEFAULT_WORKSPACE = os.environ.get("CLICKUP_WORKSPACE", "")
+ME_ID = os.environ.get("CLICKUP_ME_ID", "")
+SEARCH_FILES = tuple(filter(None, (os.environ.get("CLICKUP_ENV_FILE"),
+                                  os.path.expanduser("~/.config/clickup.env"))))
+
+
+# ── auth ────────────────────────────────────────────────────────────────────
+def token() -> str:
+    for var in ("CLICKUP_TOKEN", "CLICKUP_API_TOKEN"):
+        if os.environ.get(var):
+            return os.environ[var].strip()
+    for path in SEARCH_FILES:
+        f = os.path.expanduser(path)
+        if not os.path.isfile(f):
+            continue
+        val = ""
+        with open(f, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("export "):
+                    line = line[len("export "):]
+                if line.startswith("CLICKUP_TOKEN=") or line.startswith("CLICKUP_API_TOKEN="):
+                    val = line.split("=", 1)[1].strip().strip("'\"")
+        if val:
+            return val
+    sys.exit("error: no ClickUp token (CLICKUP_TOKEN / CLICKUP_API_TOKEN env, "
+             "$CLICKUP_ENV_FILE or ~/.config/clickup.env)")
+
+
+# ── http ────────────────────────────────────────────────────────────────────
+def call(method: str, path: str, body: dict | None = None,
+         files: dict | None = None, params: dict | None = None) -> dict:
+    url = f"{API}{path}"
+    if params:
+        flat = []
+        for k, v in params.items():
+            if isinstance(v, (list, tuple)):
+                flat += [(f"{k}[]", str(x)) for x in v]
+            else:
+                flat.append((k, str(v)))
+        if flat:
+            url += "?" + urllib.parse.urlencode(flat)
+    headers = {"Authorization": token()}
+    data: bytes | None = None
+    if files:
+        boundary = "----clickupcli" + uuid.uuid4().hex
+        parts = []
+        for name, value in (body or {}).items():
+            parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n".encode())
+        for name, (fname, raw) in files.items():
+            ctype = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+            parts.append(
+                f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"; filename=\"{fname}\"\r\n"
+                f"Content-Type: {ctype}\r\n\r\n".encode() + raw + b"\r\n")
+        parts.append(f"--{boundary}--\r\n".encode())
+        data = b"".join(parts)
+        headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+    elif body is not None:
+        data = json.dumps(body).encode()
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method.upper())
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read().decode() or "{}"
+            return json.loads(raw)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode(errors="replace")[:600]
+        sys.exit(f"error: {method.upper()} {path} -> {e.code} {detail}")
+    except urllib.error.URLError as e:
+        sys.exit(f"error: {method.upper()} {path} -> {e.reason}")
+
+
+import urllib.parse  # noqa: E402  (used by call(); kept below the docstring block)
+
+
+def md_description(task_id: str) -> str:
+    """Markdown description of a task.
+
+    The public API only returns markdown when asked:
+    ?include_markdown_description=true -> `markdown_description` (fallback
+    `description`/`text_content`). Appending must NEVER write 'markdown_description':
+    that name is an MCP-only response field — a raw GET has `description` (plain
+    text), so reading the wrong key append-wipes the original (bug hit while
+    building this CLI, 2026-10-14).
+    """
+    t = call("GET", f"/task/{task_id}", params={"include_markdown_description": "true"})
+    return t.get("markdown_description") or t.get("description") or ""
+
+
+def parse_when(value: str) -> int | None:
+    """'none' -> None (clear); 'today'/'tomorrow'; 'YYYY-MM-DD[ HH:MM]' (local);
+    or an existing epoch-ms number. The API wants epoch milliseconds."""
+    v = value.strip()
+    if v.lower() in ("none", "clear", ""):
+        return None
+    if v.isdigit() and len(v) >= 12:
+        return int(v)
+    today = _dt.datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    low = v.lower()
+    if low in ("today", "tomorrow"):
+        return int((today + _dt.timedelta(days=1 if low == "tomorrow" else 0)).timestamp() * 1000)
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+        try:
+            d = _dt.datetime.strptime(v, fmt)
+        except ValueError:
+            continue
+        if fmt == "%Y-%m-%d":
+            d = d.replace(hour=9, minute=0)
+        return int(d.timestamp() * 1000)
+    sys.exit(f"error: cannot parse date {value!r} (use YYYY-MM-DD, YYYY-MM-DD HH:MM, '"
+             f"today, tomorrow, none, or epoch ms)")
+
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+def assignee_id(value: str) -> str:
+    return ME_ID if value in ("me", "self") else value
+
+
+def task_line(t: dict) -> str:
+    who = ", ".join(a.get("username", "?") for a in (t.get("assignees") or [])) or "-"
+    st = t.get("status")
+    st = st.get("status") if isinstance(st, dict) else st
+    pts = t.get("points")
+    pts = "unset" if pts is None else pts
+    return f"{t.get('id')}  [{st}]  pts={pts}  {who}  {t.get('name')}"
+
+
+def describe_task(t: dict, want_description: bool) -> str:
+    out = [task_line(t), f"  url: {t.get('url')}",
+           f"  list: {(t.get('list') or {}).get('name')} ({(t.get('list') or {}).get('id')})",
+           f"  created: {t.get('date_created')}", f"  updated: {t.get('date_updated')}"]
+    if t.get("due_date"):
+        out.append(f"  due: {t['due_date']}")
+    if t.get("creator"):
+        out.append(f"  creator: {t['creator'].get('username')}")
+    if want_description:
+        out.append("\n--- description (markdown) ---")
+        out.append(t.get("markdown_description") or t.get("description") or "(empty)")
+    return "\n".join(out)
+
+
+PRIORITY_NUM = {"urgent": 1, "high": 2, "normal": 3, "low": 4}
+
+
+def set_custom_fields(task_id: str, pairs: list[str]) -> list[str]:
+    """Apply `--custom-field ID=VALUE` through the dedicated field endpoint.
+
+    Why not just put `custom_fields` in the create/update body: ClickUp answers 200
+    and SILENTLY IGNORES the values there (every shape tried — option UUID, option
+    orderindex, option name — left the field unset, verified 2026-10-14).
+    POST /task/{id}/field/{field_id} with `{"value": …}` is the call that sticks.
+
+    VALUE is JSON when it parses (true/false for checkboxes, {"add":[…]} for
+    people fields, ["uuid"] for labels), otherwise the raw string (option UUID for
+    dropdowns, text, URL).
+    """
+    done = []
+    for pair in pairs:
+        fid, _, raw = pair.partition("=")
+        if not fid or not _:
+            sys.exit(f"error: --custom-field wants ID=VALUE, got {pair!r}")
+        value: object = raw
+        for candidate in (raw, raw.lower()):
+            try:
+                value = json.loads(candidate)
+                break
+            except (ValueError, TypeError):
+                continue
+        call("POST", f"/task/{task_id}/field/{fid}", {"value": value})
+        done.append(fid[:8])
+    return done
+
+
+def apply_common(body: dict, a) -> dict:
+    if getattr(a, "name", None) is not None:
+        body["name"] = a.name
+    if getattr(a, "status", None):
+        body["status"] = a.status
+    if getattr(a, "priority", None):
+        # the REST API takes integers (1=urgent … 4=low); the MCP accepted names
+        body["priority"] = None if a.priority == "none" else PRIORITY_NUM[a.priority]
+    for key, attr in (("due_date", "due"), ("start_date", "start")):
+        v = getattr(a, attr, None)
+        if v:
+            body[key] = parse_when(v)
+            if key == "due_date":
+                body["due_date_time"] = bool(v not in ("none", "clear"))
+            else:
+                body["start_date_time"] = bool(v not in ("none", "clear"))
+    if getattr(a, "points", None) is not None:
+        body["points"] = None if a.points == "none" else float(a.points)
+    if getattr(a, "assignee", None) is not None:
+        body["assignees"] = [assignee_id(x) for x in a.assignee]
+    return body
+
+
+def add_common_flags(p: argparse.ArgumentParser, with_name: bool = True) -> None:
+    if with_name:
+        p.add_argument("--name")
+    p.add_argument("--status")
+    p.add_argument("--assignee", action="append", help="user id, email or 'me' (REPLACES the set)")
+    p.add_argument("--priority", choices=["urgent", "high", "normal", "low", "none"])
+    p.add_argument("--due", help="'today' | 'YYYY-MM-DD[ HH:MM]' | epoch ms | 'none'")
+    p.add_argument("--start", help="'today")
+    p.add_argument("--points", help="Sprint Points, or 'none' to clear")
+    p.add_argument("--custom-field", action="append", metavar="ID=VALUE")
+
+
+# ── commands ────────────────────────────────────────────────────────────────
+def cmd_me(a) -> None:
+    ws = a.workspace
+    try:
+        t = call("GET", f"/team/{ws}").get("team", {})
+    except SystemExit:
+        sys.exit("error: token rejected by api.clickup.com — it must be a personal pk_ token")
+    print(f"workspace: {ws}  {t.get('name')}")
+    for m in t.get("members", []):
+        u = m.get("user", {})
+        print(f"  {u.get('id')}  {u.get('username')}  {u.get('email')}")
+
+
+def cmd_hierarchy(a) -> None:
+    ws = a.workspace
+    spaces = call("GET", f"/team/{ws}/space", params={"archived": "false"}).get("spaces", [])
+    for s in spaces:
+        if a.space_id and s["id"] != a.space_id:
+            continue
+        print(f"space {s['id']}  {s['name']}")
+        folders = call("GET", f"/space/{s['id']}/folder", params={"archived": "false"}).get("folders", [])
+        for f in folders:
+            print(f"  folder {f['id']}  {f['name']}")
+            for lst in call("GET", f"/folder/{f['id']}/list", params={"archived": "false"}).get("lists", []):
+                print(f"    list {lst['id']}  {lst['name']}")
+        for lst in call("GET", f"/space/{s['id']}/list", params={"archived": "false"}).get("lists", []):
+            print(f"  list {lst['id']}  {lst['name']}")
+
+
+def cmd_list(a) -> None:
+    d = call("GET", f"/list/{a.list_id}")
+    print(f"{d['id']}  {d['name']}")
+    for s in d.get("statuses", []):
+        print(f"  {s['status']:<22} {s['type']}")
+
+
+def cmd_fields(a) -> None:
+    if a.list_id:
+        d = call("GET", f"/list/{a.list_id}/field")
+    elif a.folder_id:
+        d = call("GET", f"/folder/{a.folder_id}/field")
+    elif a.space_id:
+        d = call("GET", f"/space/{a.space_id}/field")
+    else:
+        sys.exit("error: pass --list, --folder or --space")
+    for f in d.get("fields", []):
+        opts = ""
+        if f.get("type_config", {}).get("options"):
+            opts = "  options: " + ", ".join(
+                f"{o['name']}={o['id']}" for o in f["type_config"]["options"])
+        print(f"{f['id']}  {f['name']}  ({f['type']}){' required' if f.get('required') else ''}{opts}")
+
+
+def cmd_members(a) -> None:
+    cmd_me(a)
+
+
+def cmd_tasks(a) -> None:
+    ws = a.workspace
+    params: dict = {"include_closed": "true" if a.include_closed else "false"}
+    if a.list:
+        params["list_ids"] = a.list
+    if a.space:
+        params["space_ids"] = a.space
+    if a.folder:
+        params["project_ids"] = a.folder
+    if a.assignee:
+        params["assignees"] = [assignee_id(x) for x in a.assignee]
+    if a.status:
+        params["statuses"] = a.status
+    d = call("GET", f"/team/{ws}/task", params=params)
+    tasks = d.get("tasks", [])[: a.limit]
+    for t in tasks:
+        print(task_line(t))
+    print(f"-- {len(tasks)} shown{' (has_more)' if d.get('has_more') else ''}")
+
+
+def cmd_get(a) -> None:
+    params = {"include_markdown_description": "true"} if a.description else None
+    t = call("GET", f"/task/{a.task_id}", params=params)
+    if a.json:
+        print(json.dumps(t, indent=2))
+    else:
+        print(describe_task(t, a.description))
+
+
+def cmd_update(a) -> None:
+    body = apply_common({}, a)
+    if a.description is not None:
+        body["markdown_content"] = a.description
+    if a.append_description is not None:
+        cur = md_description(a.task_id)
+        body["markdown_content"] = (cur.rstrip() + "\n\n" + a.append_description).strip()
+    if not body and not a.custom_field:
+        sys.exit("error: nothing to update")
+    if body:
+        call("PUT", f"/task/{a.task_id}", body)
+    if a.custom_field:
+        set_custom_fields(a.task_id, a.custom_field)
+    print(task_line(call("GET", f"/task/{a.task_id}")))
+
+
+def cmd_create(a) -> None:
+    body = apply_common({}, a)
+    body["name"] = a.name
+    if a.description is not None:
+        body["markdown_content"] = a.description
+    r = call("POST", f"/list/{a.list}/task", body)
+    tid = r.get("id") if isinstance(r, dict) else None
+    if tid and a.custom_field:
+        set_custom_fields(tid, a.custom_field)
+    print(r.get("url", r) if isinstance(r, dict) else r)
+
+
+def cmd_comment(a) -> None:
+    r = call("POST", f"/task/{a.task_id}/comment", {"comment_text": a.text, "notify_all": False})
+    print(f"commented on {a.task_id} (comment id {(r.get('id') if isinstance(r, dict) else '?')})")
+
+
+def cmd_comments(a) -> None:
+    d = call("GET", f"/task/{a.task_id}/comment")
+    for c in d.get("comments", []):
+        who = (c.get("user") or {}).get("username", "?")
+        print(f"{c.get('id')}  {who}: {(c.get('comment_text') or '').strip()[:300]}")
+
+
+def cmd_attach(a) -> None:
+    with open(a.file, "rb") as fh:
+        raw = fh.read()
+    r = call("POST", f"/task/{a.task_id}/attachment", files={"attachment": (os.path.basename(a.file), raw)})
+    print(f"attached {a.file} ({len(raw)} bytes) -> {r.get('url', r) if isinstance(r, dict) else r}")
+
+
+def cmd_delete(a) -> None:
+    call("DELETE", f"/task/{a.task_id}")
+    print(f"deleted {a.task_id}")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(prog="clickup", description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--workspace", default=DEFAULT_WORKSPACE)
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("me", help="token/workspace sanity check").set_defaults(fn=cmd_me)
+
+    h = sub.add_parser("hierarchy", help="spaces → folders → lists")
+    h.add_argument("--space-id")
+    h.set_defaults(fn=cmd_hierarchy)
+
+    l = sub.add_parser("list", help="list name + valid statuses")
+    l.add_argument("list_id")
+    l.set_defaults(fn=cmd_list)
+
+    f = sub.add_parser("fields", help="custom fields for a list/folder/space")
+    f.add_argument("--list", dest="list_id")
+    f.add_argument("--folder", dest="folder_id")
+    f.add_argument("--space", dest="space_id")
+    f.set_defaults(fn=cmd_fields)
+
+    sub.add_parser("members", help="workspace members").set_defaults(fn=cmd_members)
+
+    t = sub.add_parser("tasks", help="filter tasks")
+    t.add_argument("--list", action="append")
+    t.add_argument("--space", action="append")
+    t.add_argument("--folder", action="append")
+    t.add_argument("--assignee", action="append")
+    t.add_argument("--status", action="append")
+    t.add_argument("--include-closed", action="store_true")
+    t.add_argument("--limit", type=int, default=50)
+    t.set_defaults(fn=cmd_tasks)
+
+    g = sub.add_parser("get", help="show one task")
+    g.add_argument("task_id")
+    g.add_argument("--json", action="store_true")
+    g.add_argument("--description", action="store_true", help="include the markdown description")
+    g.set_defaults(fn=cmd_get)
+
+    u = sub.add_parser("update", help="update a task")
+    u.add_argument("task_id")
+    add_common_flags(u)
+    u.add_argument("--description", help="REPLACES the description (markdown)")
+    u.add_argument("--append-description", help="read, append this section, write back")
+    u.set_defaults(fn=cmd_update)
+
+    c = sub.add_parser("create", help="create a task")
+    c.add_argument("--list", required=True)
+    add_common_flags(c, with_name=False)
+    c.add_argument("--name", required=True)
+    c.add_argument("--description")
+    c.set_defaults(fn=cmd_create)
+
+    cm = sub.add_parser("comment", help="comment on a task (markdown, bare URLs)")
+    cm.add_argument("task_id")
+    cm.add_argument("text")
+    cm.set_defaults(fn=cmd_comment)
+
+    cs = sub.add_parser("comments", help="list a task's comments")
+    cs.add_argument("task_id")
+    cs.set_defaults(fn=cmd_comments)
+
+    at = sub.add_parser("attach", help="attach a file to a task")
+    at.add_argument("task_id")
+    at.add_argument("file")
+    at.set_defaults(fn=cmd_attach)
+
+    d = sub.add_parser("delete", help="delete a task")
+    d.add_argument("task_id")
+    d.set_defaults(fn=cmd_delete)
+
+    a = p.parse_args()
+    a.fn(a)
+
+
+if __name__ == "__main__":
+    main()
