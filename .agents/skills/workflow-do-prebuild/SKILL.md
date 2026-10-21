@@ -767,7 +767,7 @@ $S update <task_id> --custom-field <required-field-id>=<option-uuid>
 - `Planned/Unplanned` (required on sprint lists) — a bug report nobody scheduled is
   `Unplanned`; the option UUIDs are in the clickup skill.
 - `Customer Vertical` — only when the ticket says which vertical it is. **Known gap:
-  `Residential` does not exist as an option** and the MassCEC / `vgi-na-masscec`
+  `Residential` does not exist as an option** and that customer project's
   work is residential, so leave it unset there and say so rather than picking a
   wrong vertical.
 - Anything sprint-planning-owned (`Expected Delivery`, `Committed Quarter`,

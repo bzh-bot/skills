@@ -73,7 +73,7 @@ workflow_rename_tab "${TICKET_ID}: P11 Watch ${FEATURE_TAG}"
 **→ TaskUpdate: P11.1 → in_progress**
 
 Define the repo slug first — the GitHub org slug is `GITHUB_ORG`, NOT `ORG`
-(the org KEY `mdg`, which is only correct for worktree paths):
+(the org KEY, which is only correct for worktree paths):
 
 ```bash
 export GH_REPO="${GITHUB_ORG:-$ORG}/$REPO_NAME"   # never use "$ORG/$REPO_NAME" in a gh call — it 404s

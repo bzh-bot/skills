@@ -42,7 +42,7 @@ You are **autonomous**: no human in your pane. Run to completion, then send your
 - the `workflow-do-tour` OUT handoff: `TICKET_ID`, `TICKET_URL`, `FEATURE_TAG`, `PR_NUMBER`, `PR_URL`, `ORG`, `REPO_NAME`, `WORKTREE`, `BRANCH_NAME`, `INTEGRATION_BRANCH`, `SOURCE_REPO`, `WORKFLOW_*` env, `SCREENSHOTS_DIR`, the brief + acceptance criteria
 - `GITHUB_ORG` (the GitHub org slug) — define the repo slug once at the top of the stage:
   `export GH_REPO="${GITHUB_ORG:-$ORG}/$REPO_NAME"` and use **`$GH_REPO`** in every `gh` / `gh api` /
-  GraphQL call. `$ORG` is the org KEY (`mdg`) and is only correct for worktree paths —
+  GraphQL call. `$ORG` is the org KEY and is only correct for worktree paths —
   `gh … --repo "$ORG/$REPO_NAME"` 404s (learned the hard way).
 
 **OUT (after P8):** PR description updated, PR **marked READY FOR REVIEW and verified** (`gh pr ready`, then `isDraft=false` re-read;  a finished run never hands off a draft), ticket set to the **PRE-REVIEW** status (per the org's statusFlowNote in org-config: one org calls it `ready to test`, a ClickUp org is left at `working` — the review-pending transition is **human-only**, never a run's), PR link confirmed on ticket. **OUT (after P10, iterate mode):** PR merged (or merge-queued + confirmed merged — do NOT delete the worktree yet, the `workflow-do-post` subagent needs `$WORKTREE/screenshots/` for the email); ticket set to "done"; PR link on ticket. (Pane lifecycle is script-owned — you never open or close panes.)

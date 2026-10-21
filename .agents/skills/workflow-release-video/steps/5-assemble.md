@@ -19,7 +19,7 @@ before you start; the `ffmpeg-static` npm build does not have it.
 
 **Re-check the narration sync first — it is not just an R4 concern.** `compose-video.mjs`
 also reads `timeline.json`, so any caption, divider heading, bullet or footer edited in the
-storyboard since R4 is silently ignored here too. In the first MassCEC release video a
+storyboard since R4 is silently ignored here too. In an early release video a
 stale caption and a stale close-card bullet both reached the cut this way, and only a
 read of the contact sheet caught them.
 

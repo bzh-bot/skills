@@ -11,7 +11,7 @@
 #
 # Checks (all read-only — no repo writes, no installs, no new browser tabs):
 #   env-file        dashboard/ or frontend/ env file exists
-#   env-keys        its required MASSCEC_* keys
+#   env-keys        its required <project>_* keys
 #   env-oauth       its NEXT_PUBLIC_* sign-in keys (SKIP when a local JWT login is available)
 #   aws-sso         AWS SSO profile still valid (non-interactive sts get-caller-identity)
 #   github-api      gh authenticates with the run's GH_TOKEN_<account>
@@ -31,7 +31,7 @@
 #   PREFLIGHT_OAUTH_OPTIONAL=1  do not FAIL when no OAuth provider is configured
 #   PREFLIGHT_SKIP          space-separated check names to force SKIP (e.g. "aws-sso github-api"
 #                           for a repo with no AWS/GitHub dependency)
-#   PREFLIGHT_REQUIRED_ENV_KEYS  space-separated base keys this repo needs (default MASSCEC_API_URL MASSCEC_WEBAPP_URL;
+#   PREFLIGHT_REQUIRED_ENV_KEYS  space-separated base keys this repo needs (default APP_API_URL MASSCEC_WEBAPP_URL;
 #                           keys the app's source does not read are skipped automatically)
 #
 # Exit: 0 all PASS/SKIP · 1 at least one FAIL · 2 cannot run (no repo)
@@ -146,7 +146,7 @@ for f in "$REPO/backend/.env.local" "$REPO/backend/.env" "$REPO/.env.local" "$RE
   fi
 done
 
-REQ_KEYS="${PREFLIGHT_REQUIRED_ENV_KEYS:-MASSCEC_API_URL MASSCEC_WEBAPP_URL}"
+REQ_KEYS="${PREFLIGHT_REQUIRED_ENV_KEYS:-APP_API_URL APP_WEBAPP_URL}"
 if [ -z "$ENV_FILE" ]; then
   verdict env-keys SKIP "no env file to inspect"
   verdict env-oauth SKIP "no env file to inspect"

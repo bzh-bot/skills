@@ -8,7 +8,7 @@
 capture.** `capture-beats.mjs` copies each beat into `timeline.json`, and `tts-qwen3.py`
 reads the *timeline* — not `storyboard.json`. A narration, caption or divider edit that
 lands in the storyboard after R3 is invisible here, and nothing warns you: the build simply
-speaks the previous revision. In the first MassCEC release video that shipped stale audio
+speaks the previous revision. In an early release video that shipped stale audio
 on 11 of 19 beats.
 
 ```bash

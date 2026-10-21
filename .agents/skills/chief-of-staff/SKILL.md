@@ -421,8 +421,8 @@ capturing the reason first — never invent a reason on the human's behalf.
      task with `clickup get <task-id>` — a `https://app.clickup.com/t/<task-id>` URL's last
      segment is the ClickUp task id (`868mh7m2g`), not the ticket id. ClickUp statuses are
      **list-scoped** and Sprint lists roll, so the status named in the launch prompt must be the
-     **live** one: `~/.agents/skills/clickup/scripts/clickup list <list_id>` (Sprint 16 =
-     `901115240346`, currently backlog / cleaned backlog / ready to work / working / blocked /
+     **live** one: `~/.agents/skills/clickup/scripts/clickup list <list_id>` (a sprint list typically offers
+     backlog / cleaned backlog / ready to work / working / blocked /
      testing / in review / validation / merged / shipped / cancelled).
 3. **Launch it yourself via Bash** — no launcher subagent. Run ONE zellij
    command — cage() uses `bash -ic`; the `WORKFLOW_*` env hooks are documented here.

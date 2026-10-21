@@ -159,7 +159,7 @@ not restate the traps (there are twenty of them and they are all still live).
   `compose-video.mjs` read the *timeline*. So a narration, caption or divider edit made in
   the storyboard **after** a capture is silently invisible: the render simply uses the old
   text, with no warning. This shipped one revision of stale audio on 11 of 19 beats in the
-  first MassCEC release video, and only a host-side ASR pass caught it.
+  first release video, and only a host-side ASR pass caught it.
   **Run `scripts/check-narration-sync.mjs` before TTS and again before compose**, and
   `scripts/sync-timeline-from-storyboard.mjs` to push the storyboard's spoken/shown fields
   across without touching capture geometry. Step 4 owns the detail.
