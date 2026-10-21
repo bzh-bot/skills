@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# update-deps — update the pi CLI + its extensions, then the system packages.
+#
+# Run:  ~/.agents/skills/workflow-update-deps/scripts/update-deps
+#
+# Order matters: pi first (it is the tool doing the updating), then apt.
+#
+# apt needs sudo; if sudo needs a password here this cannot run unattended:
+# run it from a real terminal/zellij pane. If invoked with stdin not a TTY it
+# refuses up front instead of hanging on the password prompt.
+set -uo pipefail
+
+# ── preflight: this needs an interactive TTY for the sudo password ────────────
+if ! sudo -n true 2>/dev/null && [ ! -t 0 ]; then
+  echo "ERROR: sudo requires a password, but stdin is not a terminal." >&2
+  echo "       Run this from a zellij pane / terminal, not from a background job." >&2
+  exit 1
+fi
+
+old_pi="$(pi --version 2>/dev/null)"
+
+# ~/.bashrc exports PI_OFFLINE=1 to skip pi's startup package-update checks.
+# The managed pi installation resolves its own updates through pi's HTTP client,
+# which honours that flag — so every update step must clear it explicitly
+# (npm's release-age/offline behaviour is irrelevant here). Without this,
+# `pi update` fails with "Could not determine latest pi version".
+echo "== pi update =="
+env -u PI_OFFLINE pi update || exit 1
+
+echo "== pi update --extensions =="
+env -u PI_OFFLINE pi update --extensions || exit 1
+
+# Model catalogs: refreshes the provider model lists. Tolerated failure — a
+# stale catalog is not worth aborting a dependency update over.
+echo "== pi update --models =="
+env -u PI_OFFLINE pi update --models || true
+
+echo "== apt update =="
+sudo apt update
+
+echo "== apt upgrade =="
+# -y so the flow does not stall on the [Y/n] prompt; the full upgrade plan is
+# still printed above it. Override with: APT_YES="" update-deps
+sudo apt upgrade ${APT_YES:--y}
+
+new_pi="$(pi --version 2>/dev/null)"
+
+echo
+echo "pi: ${old_pi:-unknown} -> ${new_pi:-unknown}"
+echo "Done. If scoped-model warnings appear for cursor models in later headless"
+echo "runs, open /model once in a TUI session to force live discovery."
