@@ -2,13 +2,12 @@
 name: gmail-web
 description: >
   Read and act on Gmail via agent-browser driving the user's real Chrome in a
-  specified profile. This is the ONLY Gmail reader (gws was removed 2026-09-09).
-  Use when asked to read/send/triage Gmail in the browser. The caller passes the Chrome
-  profile and the expected signed-in email address; always verify the signed-in
-  account matches before acting, and never close the user's Gmail tab. Interactive
-  triage decisions (reply vs add a task vs unsubscribe vs leave) live in the
-  calling flow (e.g. triage-email) — this skill provides the Gmail-web
-  mechanics only.
+  specified profile. Use when asked to read, send or triage Gmail in the browser.
+  The caller passes the Chrome profile and the expected signed-in email address;
+  always verify the signed-in account matches before acting, and never close the
+  user's Gmail tab. Decisions about what to do with each message (reply, task,
+  unsubscribe, leave) belong to the calling flow — this skill provides the
+  Gmail-web mechanics only.
 allowed-tools: Bash(agent-browser:*), Bash(npx agent-browser:*), Bash(sleep:*), Bash(curl:*), read
 ---
 
@@ -21,11 +20,12 @@ specifies **which Chrome profile** and **which signed-in email** to expect.
 - **Bot wall / "Couldn't sign you in"**: if Google blocks the automated sign-in, relaunch the worker's Chrome with `--disable-blink-features=AutomationControlled` (CDP re-attach keeps `navigator.webdriver=false`) and retry the password fill.
 - **"This browser or app may not be secure"**: Chrome with `--remote-debugging-port` gets OAuth-flagged by Google. For the shared/host profile the fix is to pre-authenticate on the host by running plain `google-chrome --user-data-dir=<profile-dir>` (no debugging flags), logging in, then closing — the worker's Chrome then picks up the authenticated session. For isolated worker profiles, prefer a keyring lookup (`secret-tool` on Linux, Keychain on macOS) + `agent-browser fill` over interactive OAuth.
 
-**Triage mode (isolated launch):** when the caller is a triage worker, do NOT
-auto-connect. Launch an isolated headed Chrome per account instead
-(`AGENT_BROWSER_SESSION=triage-<accountId>` + `--profile ~/.agent-browser-profiles/triage-<accountId>`,
-persistent per account) and verify the signed-in account matches the expected
-identifier — the profile needs a one-time Google login on first run.
+**Per-account mode (isolated launch):** when the caller runs one browser per
+account, do NOT auto-connect. Launch an isolated headed Chrome per account
+instead (`AGENT_BROWSER_SESSION=<account>-<accountId>` +
+`--profile ~/.agent-browser-profiles/<account>-<accountId>`, persistent per
+account) and verify the signed-in account matches the expected identifier — the
+profile needs a one-time Google login on first run.
 
 ## Golden rules
 
@@ -64,7 +64,7 @@ agent-browser --auto-connect --session S --pin-tab snapshot
 agent-browser --auto-connect --session S --pin-tab eval 'document.title'
 ```
 
-**Gotcha (found 2026-09-28):** `--pin-tab tab tN` consumes the following
+**Gotcha:** `--pin-tab tab tN` consumes the following
 subcommand, so a trailing `eval` or `snapshot` on that same command line returns
 only the tab envelope. Bind on its own invocation first (step 1), then run every
 command as `--pin-tab <subcommand>` with no `tab tN` (step 2). `--pin-tab` is
@@ -89,7 +89,7 @@ sleep 2
 agent-browser --auto-connect --headed snapshot
 ```
 The message list now shows unread threads (newest first by default — Gmail web
-search can't reliably sort oldest-first; triage top-to-bottom).
+search can't reliably sort oldest-first; work top to bottom).
 
 ## Open an email & read it
 
@@ -127,6 +127,6 @@ did (counts, actions) to the calling flow.
 ## Notes / known limits
 
 - Gmail web search results are newest-first; there's no reliable oldest-first
-  toggle in the UI. Triage newest-first and note it in the wrap-up.
+  toggle in the UI. Work newest-first and say so in the wrap-up.
 - Selectors above are a starting point; Gmail's DOM changes — re-derive from the
   snapshot (`aria-label` attributes are the stable anchors) if they don't match.
