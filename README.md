@@ -1,3 +1,4 @@
 - install zellij
 - install nvm
 - install pi
+- connect provider api key (e.g. openrouter)
