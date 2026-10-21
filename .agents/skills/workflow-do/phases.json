@@ -1,0 +1,159 @@
+{
+  "agents": [
+    {
+      "agent": "scout",
+      "icon": "🔍",
+      "name": "Scout & Context",
+      "stage": "scout",
+      "phases": [
+        {
+          "id": "P0",
+          "icon": "🔓",
+          "name": "Access & Browser"
+        },
+        {
+          "id": "P1",
+          "icon": "🎫",
+          "name": "Ticket & Context"
+        }
+      ]
+    },
+    {
+      "agent": "prebuild",
+      "icon": "🌿",
+      "name": "Groom, Workspace & Draft PR",
+      "stage": "prebuild",
+      "phases": [
+        {
+          "id": "P2",
+          "icon": "🧹",
+          "name": "Groom & Plan"
+        },
+        {
+          "id": "P3",
+          "icon": "🌿",
+          "name": "Workspace & Draft PR"
+        }
+      ]
+    },
+    {
+      "agent": "build",
+      "icon": "🔨",
+      "name": "Implement & Verify",
+      "stage": "build",
+      "phases": [
+        {
+          "id": "P4",
+          "icon": "🔨",
+          "name": "Implement"
+        },
+        {
+          "id": "P5",
+          "icon": "✅",
+          "name": "Verify"
+        }
+      ]
+    },
+    {
+      "agent": "tour",
+      "icon": "🚶",
+      "name": "Screenshots & Video",
+      "stage": "tour",
+      "phases": [
+        {
+          "id": "P7",
+          "icon": "📸",
+          "name": "Screenshots & Annotate"
+        },
+        {
+          "id": "P7.8",
+          "icon": "🎬",
+          "name": "Video Tour (workflow-video-tour)"
+        }
+      ]
+    },
+    {
+      "agent": "ship",
+      "icon": "📮",
+      "name": "Finalize PR",
+      "stage": "ship-p8",
+      "phases": [
+        {
+          "id": "P8",
+          "icon": "📮",
+          "name": "Finalize PR"
+        }
+      ]
+    },
+    {
+      "agent": "wrap-up",
+      "icon": "🧵",
+      "name": "Loose Ends & Handoff",
+      "stage": "wrap-up",
+      "phases": [
+        {
+          "id": "P9",
+          "icon": "🧵",
+          "name": "Loose Ends & Handoff"
+        }
+      ]
+    },
+    {
+      "agent": "merge",
+      "icon": "🔀",
+      "name": "Review Fixes, Merge & Close",
+      "phases": [
+        {
+          "id": "P10a",
+          "icon": "💧",
+          "name": "Rehydrate"
+        },
+        {
+          "id": "P10b",
+          "icon": "🔎",
+          "name": "Review-state Classify"
+        },
+        {
+          "id": "P10b",
+          "icon": "🔧",
+          "name": "Build-fix Round"
+        },
+        {
+          "id": "P10c",
+          "icon": "🔀",
+          "name": "Merge Gate & Merge"
+        }
+      ],
+      "stages": [
+        "hydrate",
+        "review-state",
+        "build-fix",
+        "ship-p10"
+      ]
+    },
+    {
+      "agent": "post",
+      "icon": "✉️",
+      "name": "Post: Monitor, Improve, Email",
+      "stage": "post",
+      "phases": [
+        {
+          "id": "P11",
+          "icon": "📡",
+          "name": "Post-merge Monitoring"
+        },
+        {
+          "id": "P12",
+          "icon": "🧹",
+          "name": "Skill Improvement"
+        },
+        {
+          "id": "P13",
+          "icon": "✉️",
+          "name": "Summary Email"
+        }
+      ]
+    }
+  ],
+  "note": "Canonical agents + phase breakdown for workflow-do runs. Shared by the workflow-do skills and send-summary-email.ts — do not duplicate; edit this file. 'stage' maps the orchestrator stage (session name prefix workflow-<stage>-) to the agent. Sessions are launched automatically: the first user message of each session is the launch prompt, never counted as human. pi-intercom traffic is never counted as human feedback."
+}
