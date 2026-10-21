@@ -93,7 +93,7 @@ Rules:
 
 ## Also return
 
-- `title`: `<PRODUCT> <version-or-range>` — e.g. `the product 2.4` or `Orma · Oct 2026`
+- `title`: `<PRODUCT> <version-or-range>` — e.g. `Acme 2.4` or `Acme · Oct 2026`
 - `subtitle`: what the release is, **≤ 8 words** — e.g. `Billing, auth, and faster sync`
 - `introFooter` (→ `compose-video.mjs --intro-footer`): `<slug> · <from> → <to>`
 

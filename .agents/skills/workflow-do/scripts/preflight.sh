@@ -31,7 +31,7 @@
 #   PREFLIGHT_OAUTH_OPTIONAL=1  do not FAIL when no OAuth provider is configured
 #   PREFLIGHT_SKIP          space-separated check names to force SKIP (e.g. "aws-sso github-api"
 #                           for a repo with no AWS/GitHub dependency)
-#   PREFLIGHT_REQUIRED_ENV_KEYS  space-separated base keys this repo needs (default APP_API_URL MASSCEC_WEBAPP_URL;
+#   PREFLIGHT_REQUIRED_ENV_KEYS  space-separated base keys this repo needs (default APP_API_URL APP_WEBAPP_URL;
 #                           keys the app's source does not read are skipped automatically)
 #
 # Exit: 0 all PASS/SKIP · 1 at least one FAIL · 2 cannot run (no repo)
