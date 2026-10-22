@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # triage — read/patch the plain-JSON accounts registry. No python, no sqlite.
 #
-# Registry root: $TRIAGE_DIR (default ~/secrets/mendeljacks/triage), holding
+# Registry root: $TRIAGE_DIR (no default — point it at your own registry), holding
 #   orgs.json        {"<org>": {tag, chrome_user_data_dir, vault, ledger_url}}
 #   platforms.json   {"<platform>": {reader_skill, item_type}}
 #   accounts/<org>.json  [ {platform, identifier, reader_skill, enabled, notes} ]
@@ -20,7 +20,7 @@
 # Requires: bash, jq. Files may carry a leading /* comment */ line.
 set -euo pipefail
 
-ROOT="${TRIAGE_DIR:-$HOME/secrets/mendeljacks/triage}"
+ROOT="${TRIAGE_DIR:-$HOME/.config/triage}"
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
 command -v jq >/dev/null || die "triage: jq is required"

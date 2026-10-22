@@ -2149,7 +2149,7 @@ async function resolveGithubAccess(): Promise<void> {
     ghOrg = /github\.com[:\/]([^/]+)\/([^/"'\s]+?)(?:\.git)?$/.exec(remote)?.[1] ?? ''
   }
   // 2) credential account: match org-config by the triage org key, by that key as a
-  //    githubOrg, or by the RESOLVED owner (e.g. githubOrg <github-org> -> mendelmodge).
+  //    githubOrg, or by the RESOLVED owner (e.g. githubOrg <github-org> -> <github account>).
   try {
     const cfg = JSON.parse(readFileSync(`${process.env.HOME}/secrets/org-config.json`, 'utf8')) as {
       bot?: { githubUsername?: string }
