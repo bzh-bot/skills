@@ -21,28 +21,28 @@ edits in the clone are live immediately. Re-run `install.sh` after pulling.
 
 ## Fresh machine
 
-A new box (container, VM, throwaway GPU rental) needs four things before the skills do
-anything useful: `git`, Node via `nvm`, `pi`
-(`npm i -g @earendil-works/pi-coding-agent`), and a `gh` login. Install `gh` **and**
-authenticate it — `gh auth login`, then check with `gh api user` that the account is
-the one you commit as, because a token for the wrong account is worse than none.
-Nothing on such a box survives a re-rent, so script the whole setup rather than
-typing it.
+`install.sh` is the whole setup, not just the skills:
 
-Then the skills themselves: `./install.sh --copy` (copy, not symlink, on a throwaway
-box) and a model provider for `pi` — put the provider key in the environment or in
-`~/.pi/agent/auth.json` (`chmod 600`). Keys belong in your secret store, never in this
-repo or a commit message.
+```sh
+./install.sh                    # provision this machine
+HOST=modge_vast ./install.sh    # provision a remote box over ssh
+./install.sh --skills           # skills only (the old behaviour)
+```
 
-`install.sh` also copies the `pi` theme and extensions, including the local
-`packages/zellij-tab-name` package, so a settings entry `./packages/zellij-tab-name`
-resolves on the new box.
+It installs `gh`, Node via `nvm`, `pi` and the extensions this repo ships
+(`pi-intercom` included), clones this repo and installs the skills, sets a default
+model, and — unless `SKIP_SECRETS=1` — copies the org configuration from the machine
+you ran it on: `~/secrets/org-config.json`, `<org>/reviewers.json`, `env/*.env` and
+the triage registry. Docker is installed only where the kernel allows it; an
+unprivileged container cannot run it.
 
-Add `pi-intercom` too, or the coordination flows have nothing to talk over:
-`pi install npm:pi-intercom` (restart pi afterwards). It needs no config to work on one
-machine; on a named host set `crossMachine.machineName` in
-`~/.pi/agent/intercom/config.json` so peers can address the box by a readable name
-instead of a container hostname.
+`gh` is the one step that needs a human: the device flow prints a code for
+`https://github.com/login/device`, and the browser has to already be signed in as
+that account. Check `gh api user` afterwards — a token for the wrong account is
+worse than none.
+
+Nothing survives a re-rent on a throwaway box, so re-run the script rather than
+fixing things by hand.
 
 ## Environment
 
