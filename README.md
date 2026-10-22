@@ -19,6 +19,16 @@ git clone https://github.com/mendeljacks/skills ~/src/skills
 Skills resolve from `~/.agents/skills/<name>/SKILL.md`. Symlinks are the default so
 edits in the clone are live immediately. Re-run `install.sh` after pulling.
 
+## Fresh machine
+
+A new box (container, VM, throwaway GPU rental) needs four things before the skills do
+anything useful: `git`, Node via `nvm`, `pi`
+(`npm i -g @earendil-works/pi-coding-agent`), and a `gh` login. Install `gh` **and**
+authenticate it — `gh auth login`, then check with `gh api user` that the account is
+the one you commit as, because a token for the wrong account is worse than none.
+Nothing on such a box survives a re-rent, so script the whole setup rather than
+typing it.
+
 ## Environment
 
 Some skills read a private configuration instead of hardcoding yours. Nothing here
