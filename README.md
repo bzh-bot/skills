@@ -29,6 +29,11 @@ the one you commit as, because a token for the wrong account is worse than none.
 Nothing on such a box survives a re-rent, so script the whole setup rather than
 typing it.
 
+Then the skills themselves: `./install.sh --copy` (copy, not symlink, on a throwaway
+box) and a model provider for `pi` — put the provider key in the environment or in
+`~/.pi/agent/auth.json` (`chmod 600`). Keys belong in your secret store, never in this
+repo or a commit message.
+
 ## Environment
 
 Some skills read a private configuration instead of hardcoding yours. Nothing here
