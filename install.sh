@@ -70,7 +70,7 @@ done
 if [ "${PI:-1}" = 1 ] && [ -d "$ROOT/.pi/agent" ]; then
   target="$HOME/.pi/agent"
   mkdir -p "$target"
-  for kind in themes extensions extensions-config; do
+  for kind in themes extensions extensions-config packages; do
     [ -d "$ROOT/.pi/agent/$kind" ] || continue
     mkdir -p "$target/$kind"
     cp -R "$ROOT/.pi/agent/$kind/." "$target/$kind/" 2>/dev/null || true
