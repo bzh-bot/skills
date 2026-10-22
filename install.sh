@@ -21,7 +21,8 @@
 #   ORG=<name>       which org's config to copy (default: none — skipped)
 #
 # Knobs: DEFAULT_PROVIDER, DEFAULT_MODEL, PI_PACKAGES, PI_AUTH_PROVIDERS,
-#        PI_MODEL_PROVIDERS, GH_ACCOUNT, GH_EMAIL, MACHINE_NAME, SKILLS_REPO.
+#        PI_MODEL_PROVIDERS, GH_ACCOUNT, GH_EMAIL, MACHINE_NAME, SKILLS_REPO,
+#        ZELLIJ_VERSION, NVM_VERSION.
 #
 # Nothing secret ships in this file: credentials and org config are copied from
 # the caller at run time. A remote run stages them in a tarball and hands it to
@@ -119,6 +120,8 @@ if [ -n "${HOST:-}" ] && [ "${REMOTE:-0}" != 1 ]; then
     for t in "$LOCAL_SECRETS/triage" "$LOCAL_SECRETS/$ORG/triage"; do [ -d "$t" ] && cp -R "$t" "$stage/secrets/" && break; done
   fi
 
+  [ -f "$HOME/.config/zellij/config.kdl" ] && cp "$HOME/.config/zellij/config.kdl" "$stage/zellij.kdl"
+
   if [ -f "$LOCAL_AGENT_DIR/auth.json" ]; then
     PROV="${PI_AUTH_PROVIDERS:-ollama-cloud openrouter}" python3 - "$LOCAL_AGENT_DIR/auth.json" > "$stage/pi/auth.json" <<'PY'
 import json, os, sys
@@ -148,6 +151,7 @@ GH_SCOPES="${GH_SCOPES:-repo read:org workflow gist}"
 MACHINE_NAME="${MACHINE_NAME:-${HOST:-$(hostname -s)}}"
 SKILLS_REPO="${SKILLS_REPO:-https://github.com/mendeljacks/skills}"
 NVM_VERSION="${NVM_VERSION:-v0.40.3}"
+ZELLIJ_VERSION="${ZELLIJ_VERSION:-0.45.1}"
 SKILLS_DIR="${SKILLS_DIR:-$HOME/src/skills}"
 
 # staged files (remote runs): place them before anything tries to read them
@@ -249,6 +253,40 @@ else
     warn "this host cannot run docker: unshare/mounts are denied (an unprivileged"
     warn "container, e.g. a Vast.ai container instance — Docker needs a VM rental)"
   fi
+fi
+
+# 4b. zellij + login hook ------------------------------------------------------
+say "zellij"
+if command -v zellij >/dev/null 2>&1; then
+  echo "  $(zellij --version)"
+else
+  curl -fsSL "https://github.com/zellij-org/zellij/releases/download/v$ZELLIJ_VERSION/zellij-x86_64-unknown-linux-musl.tar.gz" \
+    | sudo_if_needed tar -xz -C /usr/local/bin zellij
+  sudo_if_needed chmod +x /usr/local/bin/zellij
+  echo "  $(zellij --version)"
+fi
+
+ZELLIJ_CONFIG="$HOME/.config/zellij/config.kdl"
+if [ -s /root/.pisetup/zellij.kdl ]; then
+  mkdir -p "$(dirname "$ZELLIJ_CONFIG")"
+  cp /root/.pisetup/zellij.kdl "$ZELLIJ_CONFIG"
+  echo "  config <- staged copy"
+elif [ -f "$ZELLIJ_CONFIG" ]; then
+  echo "  config already in place"
+else
+  warn "no zellij config at $ZELLIJ_CONFIG — leaving the default"
+fi
+if [ -f "$ZELLIJ_CONFIG" ] && ! grep -q '^show_startup_tips' "$ZELLIJ_CONFIG"; then
+  printf '\n// keep the login clean: no first-run tip panes\nshow_startup_tips false\nshow_release_notes false\n' >> "$ZELLIJ_CONFIG"
+fi
+
+# The Vast images auto-attach tmux from the login hook, and tmux is not installed,
+# so the shell exits on connect. Point that hook at zellij instead. No-op elsewhere.
+if [ -f "$HOME/.bashrc" ] && grep -q '.no_auto_tmux' "$HOME/.bashrc" && ! grep -q '.no_auto_zellij' "$HOME/.bashrc"; then
+  say "patching the tmux login hook to zellij"
+  cp "$HOME/.bashrc" "$HOME/.bashrc.bak" 2>/dev/null || true
+  HOOK="$HOOK" sed -i '/\.no_auto_tmux/{s|.*|if [ -z "$ZELLIJ" ] \&\& [ -n "$SSH_CONNECTION" ] \&\& [ ! -e "$HOME/.no_auto_zellij" ] \&\& [ -t 0 ]; then zellij attach --create main; exit; fi|}' "$HOME/.bashrc"
+  bash -n "$HOME/.bashrc" && echo "  hook patched" || warn "hook patch broke .bashrc — restore $HOME/.bashrc.bak"
 fi
 
 # 5. skills --------------------------------------------------------------------
