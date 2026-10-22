@@ -116,7 +116,7 @@ if [ -n "${HOST:-}" ] && [ "${REMOTE:-0}" != 1 ]; then
       esac
     done
     shopt -u nullglob
-    [ -d "$LOCAL_SECRETS/triage" ] && cp -R "$LOCAL_SECRETS/triage" "$stage/secrets/"
+    for t in "$LOCAL_SECRETS/triage" "$LOCAL_SECRETS/$ORG/triage"; do [ -d "$t" ] && cp -R "$t" "$stage/secrets/" && break; done
   fi
 
   if [ -f "$LOCAL_AGENT_DIR/auth.json" ]; then
