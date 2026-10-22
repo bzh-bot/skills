@@ -34,6 +34,12 @@ box) and a model provider for `pi` — put the provider key in the environment o
 `~/.pi/agent/auth.json` (`chmod 600`). Keys belong in your secret store, never in this
 repo or a commit message.
 
+Add `pi-intercom` too, or the coordination flows have nothing to talk over:
+`pi install npm:pi-intercom` (restart pi afterwards). It needs no config to work on one
+machine; on a named host set `crossMachine.machineName` in
+`~/.pi/agent/intercom/config.json` so peers can address the box by a readable name
+instead of a container hostname.
+
 ## Environment
 
 Some skills read a private configuration instead of hardcoding yours. Nothing here
