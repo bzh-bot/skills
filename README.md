@@ -25,15 +25,16 @@ edits in the clone are live immediately. Re-run `install.sh` after pulling.
 
 ```sh
 ./install.sh                    # provision this machine
-HOST=gpu-box ./install.sh        # provision a remote box over ssh
+HOST=gpu-box ./install.sh       # provision a remote box over ssh
 ./install.sh --skills           # skills only (the old behaviour)
 ```
 
 It installs `gh`, Node via `nvm`, `pi` and the extensions this repo ships
 (`pi-intercom` included), clones this repo and installs the skills, sets a default
-model, and — unless `SKIP_SECRETS=1` — copies the org configuration from the machine
-you ran it on: `~/secrets/org-config.json`, `<org>/reviewers.json`, `env/*.env` and
-the triage registry. Docker is installed only where the kernel allows it; an
+model, and — when `ORG=<name>` is given, unless `SKIP_SECRETS=1` — copies that org's
+configuration from the machine you ran it on: `~/secrets/org-config.json`,
+`<org>/reviewers.json`, matching `env/*.env` and the triage registry. Without `ORG`
+nothing private is copied; the script stays org-agnostic. Docker is installed only where the kernel allows it; an
 unprivileged container cannot run it.
 
 `gh` is the one step that needs a human: the device flow prints a code for
