@@ -79,6 +79,11 @@ install_skills() {
       cp -R "$ROOT/.pi/agent/$kind/." "$target/$kind/" 2>/dev/null || true
       echo "  pi    $kind -> $target/$kind"
     done
+    for file in APPEND_SYSTEM.md; do
+      [ -f "$ROOT/.pi/agent/$file" ] || continue
+      cp "$ROOT/.pi/agent/$file" "$target/$file"
+      echo "  pi    $file -> $target/$file"
+    done
   fi
 
   echo

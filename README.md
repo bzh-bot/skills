@@ -108,6 +108,7 @@ The repo also carries a small slice of pi configuration, installed by `install.s
   cage), `process-path.ts` (marks processes started by pi), `zj-radar.js` (zellij pane radar)
 - `.pi/agent/extensions-config/pi-tool-display.json` — config for the tool-display
   extension, which lives in its own repo (`mendeljacks/pi-tool-display`)
+- `.pi/agent/APPEND_SYSTEM.md` — response-style rules appended to pi's system prompt
 
 Extensions are copied, not linked, so pi can write next to them; re-run `install.sh`
 after pulling to refresh them.
