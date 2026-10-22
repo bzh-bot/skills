@@ -8,7 +8,7 @@
 #     copied in from the machine you run it on.
 #
 #   ./install.sh                      provision THIS machine
-#   HOST=modge_vast ./install.sh      provision a remote box over ssh
+#   HOST=gpu-box ./install.sh         provision a remote box over ssh
 #   ./install.sh --skills             only install the skills (old behaviour)
 #   ./install.sh --skills slack zellij
 #   DEST=/some/path ./install.sh --skills
@@ -18,7 +18,7 @@
 #   SKIP_SECRETS=1   don't copy ~/secrets (org-config, reviewers, env, gitconfig)
 #   SKIP_GH=1        don't run the GitHub device flow
 #   SKIP_DOCKER=1    don't try to install docker
-#   ORG=modge        which org's config to copy (default: modge)
+#   ORG=<name>       which org's config to copy (default: none — skipped)
 #
 # Knobs: DEFAULT_PROVIDER, DEFAULT_MODEL, PI_PACKAGES, PI_AUTH_PROVIDERS,
 #        PI_MODEL_PROVIDERS, GH_ACCOUNT, GH_EMAIL, MACHINE_NAME, SKILLS_REPO.
@@ -93,16 +93,19 @@ fi
 # ── remote transport ─────────────────────────────────────────────────────────
 # When HOST is set, stage everything the target needs and run this same script
 # there. Secrets are copied as files because the target cannot read this machine.
-ORG="${ORG:-modge}"
+ORG="${ORG:-}"
 LOCAL_AGENT_DIR="$HOME/.pi/agent"
 LOCAL_SECRETS="$HOME/secrets"
 
 if [ -n "${HOST:-}" ] && [ "${REMOTE:-0}" != 1 ]; then
   stage="$(mktemp -d)"
-  mkdir -p "$stage/pi" "$stage/secrets/$ORG" "$stage/secrets/env"
+  mkdir -p "$stage/pi"
   cp "${BASH_SOURCE[0]}" "$stage/install.sh"
 
-  if [ "${SKIP_SECRETS:-0}" != 1 ]; then
+  if [ "${SKIP_SECRETS:-0}" != 1 ] && [ -z "$ORG" ]; then
+    warn "ORG is not set — skipping the org configuration copy"
+  elif [ "${SKIP_SECRETS:-0}" != 1 ]; then
+    mkdir -p "$stage/secrets/$ORG" "$stage/secrets/env"
     [ -f "$LOCAL_SECRETS/org-config.json" ] && cp "$LOCAL_SECRETS/org-config.json" "$stage/secrets/"
     [ -f "$LOCAL_SECRETS/$ORG/reviewers.json" ] && cp "$LOCAL_SECRETS/$ORG/reviewers.json" "$stage/secrets/$ORG/"
     [ -f "$LOCAL_SECRETS/$ORG/gitconfig-$ORG" ] && cp "$LOCAL_SECRETS/$ORG/gitconfig-$ORG" "$stage/secrets/$ORG/"
@@ -138,8 +141,8 @@ PI_MODEL_PROVIDERS="${PI_MODEL_PROVIDERS:-ollama-cloud}"
 DEFAULT_PROVIDER="${DEFAULT_PROVIDER:-ollama-cloud}"
 DEFAULT_MODEL="${DEFAULT_MODEL:-deepseek-v4.1-flash:1017}"
 PI_PACKAGES="${PI_PACKAGES:-npm:pi-ollama-cloud npm:pi-intercom npm:@tintinweb/pi-tasks npm:@tintinweb/pi-subagents npm:pi-goal npm:pi-fusion npm:pi-timer npm:pi-notifi npm:pi-context-usage npm:pi-token-meter npm:@juicesharp/rpiv-ask-user-question ./packages/zellij-tab-name}"
-GH_ACCOUNT="${GH_ACCOUNT:-bzh-bot}"
-GH_EMAIL="${GH_EMAIL:-bzh@modge.com}"
+GH_ACCOUNT="${GH_ACCOUNT:-$(gh api user --jq .login 2>/dev/null || git config --global user.name || echo root)}"
+GH_EMAIL="${GH_EMAIL:-}"
 GH_CLIENT_ID="${GH_CLIENT_ID:-178c6fc778ccc68e1d6a}"
 GH_SCOPES="${GH_SCOPES:-repo read:org workflow gist}"
 MACHINE_NAME="${MACHINE_NAME:-${HOST:-$(hostname -s)}}"
@@ -303,9 +306,12 @@ EOF
   echo "  TRIAGE_DIR=$HOME/secrets/triage"
 fi
 
-say "git identity: $GH_ACCOUNT <$GH_EMAIL>"
-git config --global user.name "$GH_ACCOUNT"
-git config --global user.email "$GH_EMAIL"
+if [ -z "$GH_EMAIL" ]; then
+  GH_EMAIL="$(gh api user --jq '.email // empty' 2>/dev/null || true)"
+fi
+say "git identity: ${GH_ACCOUNT:-unset} <${GH_EMAIL:-unset}>"
+[ -n "$GH_ACCOUNT" ] && git config --global user.name "$GH_ACCOUNT"
+[ -n "$GH_EMAIL" ] && git config --global user.email "$GH_EMAIL"
 
 # 9. gh login ------------------------------------------------------------------
 if [ "${SKIP_GH:-0}" = 1 ]; then

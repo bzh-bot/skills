@@ -25,7 +25,7 @@ edits in the clone are live immediately. Re-run `install.sh` after pulling.
 
 ```sh
 ./install.sh                    # provision this machine
-HOST=modge_vast ./install.sh    # provision a remote box over ssh
+HOST=gpu-box ./install.sh        # provision a remote box over ssh
 ./install.sh --skills           # skills only (the old behaviour)
 ```
 
