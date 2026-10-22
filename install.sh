@@ -36,7 +36,7 @@ if [ -d "$ROOT/.agents/skills" ]; then SRC="$ROOT/.agents/skills"; else SRC="$RO
 
 DEST="${DEST:-$HOME/.agents/skills}"
 MODE="link"
-SKILLS_ONLY=0
+SKILLS_ONLY="${SKILLS_ONLY:-0}"
 NAMES=()
 for arg in "$@"; do
   case "$arg" in
@@ -259,7 +259,7 @@ else
   rm -rf "$SKILLS_DIR"
   git clone -q --depth 1 "$SKILLS_REPO" "$SKILLS_DIR"
 fi
-SKILLS_ONLY=1 bash "$SKILLS_DIR/install.sh" --copy 2>&1 | tail -2
+bash "$SKILLS_DIR/install.sh" --skills --copy 2>&1 | tail -2
 echo "  skills $(ls "$DEST" 2>/dev/null | wc -l)"
 
 # 6. pi settings ---------------------------------------------------------------
