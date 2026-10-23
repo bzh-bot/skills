@@ -1,0 +1,36 @@
+{
+  "theme": "capo-dark",
+  "quietStartup": true,
+  "packages": [
+    "npm:@tintinweb/pi-tasks",
+    "npm:pi-token-meter",
+    "npm:pi-notifi",
+    "npm:pi-ollama-cloud",
+    "npm:@juicesharp/rpiv-ask-user-question",
+    "npm:pi-goal",
+    "npm:pi-timer",
+    "./packages/zellij-tab-name",
+    "npm:pi-fusion",
+    "npm:pi-intercom",
+    "npm:pi-context-usage",
+    "npm:@rahularya01/pi-cursor"
+  ],
+  "enabledModels": [
+    "ollama-cloud/deepseek-v4.1-flash:1017",
+    "ollama-cloud/glm-5.3",
+    "ollama-cloud/glm-5.3-flash",
+    "ollama-cloud/gemma4:31b",
+    "ollama-cloud/qwen3-vl:235b"
+  ],
+  "hideThinkingBlock": true,
+  "images": {
+    "blockImages": false
+  },
+  "terminal": {
+    "showTerminalProgress": true
+  },
+  "tuiMode": "regular",
+  "defaultTools": [
+    "+codemode"
+  ]
+}
