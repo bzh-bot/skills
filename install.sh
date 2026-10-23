@@ -435,11 +435,29 @@ fi
 
 # 7. pi settings ---------------------------------------------------------------
 say "pi settings (default $DEFAULT_PROVIDER/$DEFAULT_MODEL)"
-DEF_PROVIDER="$DEFAULT_PROVIDER" DEF_MODEL="$DEFAULT_MODEL" PI_PKGS="$PI_PACKAGES" python3 - <<'PY'
+DEF_PROVIDER="$DEFAULT_PROVIDER" DEF_MODEL="$DEFAULT_MODEL" PI_PKGS="$PI_PACKAGES" \
+TEMPLATE="$SKILLS_DIR/.pi/agent/settings.template.json" python3 - <<'PY'
 import json, os, pathlib
 p = pathlib.Path.home() / '.pi/agent/settings.json'
 p.parent.mkdir(parents=True, exist_ok=True)
 s = json.loads(p.read_text()) if p.exists() else {}
+
+# Machine-neutral preferences shipped with the repo (theme, UI, package list).
+# Only keys the target does not already define are taken, so a re-run never
+# clobbers this box's provider/model choices.
+tpl = pathlib.Path(os.environ.get('TEMPLATE', ''))
+if tpl.is_file():
+    base = json.loads(tpl.read_text())
+    added = []
+    for k, v in base.items():
+        if k == 'packages':
+            pk = s.setdefault('packages', [])
+            for item in v:
+                if item not in pk: pk.append(item); added.append(item)
+        elif k not in s:
+            s[k] = v; added.append(k)
+    print('  template:', ', '.join(added) if added else 'nothing new')
+
 s['defaultProvider'] = os.environ['DEF_PROVIDER']
 s['defaultModel'] = os.environ['DEF_MODEL']
 pk = s.setdefault('packages', [])
