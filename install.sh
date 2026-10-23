@@ -22,7 +22,7 @@
 #
 # Knobs: DEFAULT_PROVIDER, DEFAULT_MODEL, PI_PACKAGES, PI_AUTH_PROVIDERS,
 #        PI_MODEL_PROVIDERS, GH_ACCOUNT, GH_EMAIL, MACHINE_NAME, SKILLS_REPO,
-#        ZELLIJ_VERSION, NVM_VERSION.
+#        ZELLIJ_VERSION, NVIM_VERSION, NVM_VERSION.
 #
 # Nothing secret ships in this file: credentials and org config are copied from
 # the caller at run time. A remote run stages them in a tarball and hands it to
@@ -126,6 +126,7 @@ if [ -n "${HOST:-}" ] && [ "${REMOTE:-0}" != 1 ]; then
   fi
 
   [ -f "$HOME/.config/zellij/config.kdl" ] && cp "$HOME/.config/zellij/config.kdl" "$stage/zellij.kdl"
+  [ -d "$HOME/.config/nvim" ] && cp -R "$HOME/.config/nvim" "$stage/nvim"
 
   if [ -f "$LOCAL_AGENT_DIR/auth.json" ]; then
     PROV="${PI_AUTH_PROVIDERS:-ollama-cloud openrouter}" python3 - "$LOCAL_AGENT_DIR/auth.json" > "$stage/pi/auth.json" <<'PY'
@@ -157,6 +158,7 @@ MACHINE_NAME="${MACHINE_NAME:-${HOST:-$(hostname -s)}}"
 SKILLS_REPO="${SKILLS_REPO:-https://github.com/mendeljacks/skills}"
 NVM_VERSION="${NVM_VERSION:-v0.40.3}"
 ZELLIJ_VERSION="${ZELLIJ_VERSION:-0.45.1}"
+NVIM_VERSION="${NVIM_VERSION:-latest}"
 SKILLS_DIR="${SKILLS_DIR:-$HOME/src/skills}"
 
 # staged files (remote runs): place them before anything tries to read them
@@ -292,6 +294,41 @@ if [ -f "$HOME/.bashrc" ] && grep -q '.no_auto_tmux' "$HOME/.bashrc" && ! grep -
   cp "$HOME/.bashrc" "$HOME/.bashrc.bak" 2>/dev/null || true
   HOOK="$HOOK" sed -i '/\.no_auto_tmux/{s|.*|if [ -z "$ZELLIJ" ] \&\& [ -n "$SSH_CONNECTION" ] \&\& [ ! -e "$HOME/.no_auto_zellij" ] \&\& [ -t 0 ]; then zellij attach --create main; exit; fi|}' "$HOME/.bashrc"
   bash -n "$HOME/.bashrc" && echo "  hook patched" || warn "hook patch broke .bashrc — restore $HOME/.bashrc.bak"
+fi
+
+# 4c. neovim -------------------------------------------------------------------
+say "neovim"
+if command -v nvim >/dev/null 2>&1; then
+  echo "  $(nvim --version | head -1)"
+else
+  NVIM_REL="${NVIM_VERSION:-latest}"
+  if [ "$NVIM_REL" = latest ]; then
+    NVIM_URL="https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
+  else
+    NVIM_URL="https://github.com/neovim/neovim/releases/download/v${NVIM_REL#v}/nvim-linux-x86_64.tar.gz"
+  fi
+  tmp="$(mktemp -d)"
+  if curl -fsSL "$NVIM_URL" -o "$tmp/nvim.tar.gz"; then
+    sudo_if_needed rm -rf /opt/nvim
+    sudo_if_needed mkdir -p /opt
+    sudo_if_needed tar -xzf "$tmp/nvim.tar.gz" -C /opt
+    sudo_if_needed ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim
+    echo "  $(nvim --version | head -1)"
+  else
+    warn "could not download neovim ($NVIM_URL)"
+  fi
+  rm -rf "$tmp"
+fi
+
+NVIM_CONFIG="$HOME/.config/nvim"
+if [ -d /root/.pisetup/nvim ]; then
+  mkdir -p "$NVIM_CONFIG"
+  cp -R /root/.pisetup/nvim/. "$NVIM_CONFIG/"
+  echo "  config <- staged copy ($(find "$NVIM_CONFIG" -type f | wc -l) files)"
+elif [ -f "$NVIM_CONFIG/init.lua" ] || [ -f "$NVIM_CONFIG/init.vim" ]; then
+  echo "  config already in place"
+else
+  warn "no nvim config at $NVIM_CONFIG"
 fi
 
 # 5. skills --------------------------------------------------------------------
