@@ -138,10 +138,12 @@ if cfg.exists():
     orgs = d.get("orgs") or []
     keep = [o for o in orgs if org in (o.get("org"), o.get("githubOrg"))]
     if keep:
-        meta = {k: v for k, v in d.items() if k != "orgs"}
+        # `bot` is a single global block that usually names another org's machine
+        # account; the org's own `poll.github.account` is the authoritative one.
+        meta = {k: v for k, v in d.items() if k not in ("orgs", "bot")}
         meta["orgs"] = keep
         (dest / "org-config.json").write_text(json.dumps(meta, indent=2) + "\n")
-        note.append(f"org-config.json (1 of {len(orgs)} orgs)")
+        note.append(f"org-config.json (1 of {len(orgs)} orgs, global bot block dropped)")
     else:
         note.append(f"org-config.json (no entry for '{org}' — skipped)")
 
