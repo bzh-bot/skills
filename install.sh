@@ -164,9 +164,26 @@ if src_triage is None:
     note.append("triage: NOT FOUND (set TRIAGE_DIR to its path)")
 else:
     out = dest / "triage"; (out / "accounts").mkdir(parents=True, exist_ok=True)
-    # platforms.json only describes platforms — org-neutral, copy verbatim
-    if (src_triage / "platforms.json").exists():
-        shutil.copy2(src_triage / "platforms.json", out / "platforms.json")
+    # platforms.json — keep only the platform definitions this org's accounts use,
+    # so no other org's reader-skill names ride along
+    pl_path = src_triage / "platforms.json"
+    if pl_path.exists():
+        pl = load(pl_path)
+        used = set()
+        acc_src = src_triage / "accounts" / f"{torg}.json"
+        if acc_src.exists():
+            try:
+                used = {a.get("platform") for a in load(acc_src)}
+            except Exception:
+                used = set()
+        if isinstance(pl, dict) and used:
+            keep = {k: v for k, v in pl.items() if k in used}
+            (out / "platforms.json").write_text(json.dumps(keep, indent=2) + "\n")
+            note.append(f"triage/platforms.json ({len(keep)} of {len(pl)})")
+        elif isinstance(pl, dict):
+            note.append("triage/platforms.json SKIPPED (no accounts file to scope it)")
+        else:
+            shutil.copy2(pl_path, out / "platforms.json")
     oj = load(src_triage / "orgs.json") if (src_triage / "orgs.json").exists() else None
     if isinstance(oj, dict):
         mine = {k: v for k, v in oj.items() if k == torg}
