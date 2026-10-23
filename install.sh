@@ -296,7 +296,18 @@ if [ -f "$HOME/.bashrc" ] && grep -q '.no_auto_tmux' "$HOME/.bashrc" && ! grep -
   bash -n "$HOME/.bashrc" && echo "  hook patched" || warn "hook patch broke .bashrc — restore $HOME/.bashrc.bak"
 fi
 
-# 4c. neovim -------------------------------------------------------------------
+# 5. skills --------------------------------------------------------------------
+say "skills from $SKILLS_REPO"
+if [ -d "$SKILLS_DIR/.git" ]; then
+  git -C "$SKILLS_DIR" pull -q --ff-only || warn "could not pull $SKILLS_DIR"
+else
+  rm -rf "$SKILLS_DIR"
+  git clone -q --depth 1 "$SKILLS_REPO" "$SKILLS_DIR"
+fi
+bash "$SKILLS_DIR/install.sh" --skills --copy 2>&1 | tail -2
+echo "  skills $(ls "$DEST" 2>/dev/null | wc -l)"
+
+# 6. neovim -------------------------------------------------------------------
 say "neovim"
 if command -v nvim >/dev/null 2>&1; then
   echo "  $(nvim --version | head -1)"
@@ -325,24 +336,18 @@ if [ -d /root/.pisetup/nvim ]; then
   mkdir -p "$NVIM_CONFIG"
   cp -R /root/.pisetup/nvim/. "$NVIM_CONFIG/"
   echo "  config <- staged copy ($(find "$NVIM_CONFIG" -type f | wc -l) files)"
+elif [ -d "$SKILLS_DIR/.config/nvim" ]; then
+  mkdir -p "$NVIM_CONFIG"
+  cp -R "$SKILLS_DIR/.config/nvim/." "$NVIM_CONFIG/"
+  echo "  config <- repo copy ($(find "$NVIM_CONFIG" -type f | wc -l) files)"
 elif [ -f "$NVIM_CONFIG/init.lua" ] || [ -f "$NVIM_CONFIG/init.vim" ]; then
   echo "  config already in place"
 else
   warn "no nvim config at $NVIM_CONFIG"
 fi
 
-# 5. skills --------------------------------------------------------------------
-say "skills from $SKILLS_REPO"
-if [ -d "$SKILLS_DIR/.git" ]; then
-  git -C "$SKILLS_DIR" pull -q --ff-only || warn "could not pull $SKILLS_DIR"
-else
-  rm -rf "$SKILLS_DIR"
-  git clone -q --depth 1 "$SKILLS_REPO" "$SKILLS_DIR"
-fi
-bash "$SKILLS_DIR/install.sh" --skills --copy 2>&1 | tail -2
-echo "  skills $(ls "$DEST" 2>/dev/null | wc -l)"
 
-# 6. pi settings ---------------------------------------------------------------
+# 7. pi settings ---------------------------------------------------------------
 say "pi settings (default $DEFAULT_PROVIDER/$DEFAULT_MODEL)"
 DEF_PROVIDER="$DEFAULT_PROVIDER" DEF_MODEL="$DEFAULT_MODEL" PI_PKGS="$PI_PACKAGES" python3 - <<'PY'
 import json, os, pathlib
@@ -364,7 +369,7 @@ for p in $PI_PACKAGES; do
   pi install "$p" 2>&1 | grep -E '^Installed|already' | tail -1 || warn "pi install $p failed"
 done
 
-# 7. pi-intercom ---------------------------------------------------------------
+# 8. pi-intercom ---------------------------------------------------------------
 say "pi-intercom config (machineName: $MACHINE_NAME)"
 MACHINE="$MACHINE_NAME" python3 - <<'PY'
 import json, os, pathlib
@@ -376,7 +381,7 @@ p.write_text(json.dumps(cfg, indent=2) + '\n')
 print('  machineName:', cfg['crossMachine']['machineName'])
 PY
 
-# 8. git identity --------------------------------------------------------------
+# 9. git identity --------------------------------------------------------------
 if [ -d "$HOME/secrets/triage" ]; then
   say "registry env for the skills"
   grep -q '^export TRIAGE_DIR=' "$HOME/.bashrc" 2>/dev/null || cat >> "$HOME/.bashrc" <<EOF
@@ -393,7 +398,7 @@ say "git identity: ${GH_ACCOUNT:-unset} <${GH_EMAIL:-unset}>"
 [ -n "$GH_ACCOUNT" ] && git config --global user.name "$GH_ACCOUNT"
 [ -n "$GH_EMAIL" ] && git config --global user.email "$GH_EMAIL"
 
-# 9. gh login ------------------------------------------------------------------
+# 10. gh login ------------------------------------------------------------------
 if [ "${SKIP_GH:-0}" = 1 ]; then
   warn "SKIP_GH=1 — gh left logged out"
 elif gh auth status 2>&1 | grep -q "account $GH_ACCOUNT"; then
@@ -430,7 +435,7 @@ PY
   gh auth status 2>&1 | head -4 || true
 fi
 
-# 10. verify -------------------------------------------------------------------
+# 11. verify -------------------------------------------------------------------
 say "verification"
 python3 - <<'PY'
 import json, pathlib, subprocess
