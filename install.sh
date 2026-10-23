@@ -19,6 +19,9 @@
 #   SKIP_GH=1        don't run the GitHub device flow
 #   SKIP_DOCKER=1    don't try to install docker
 #   ORG=<name>       which org's config to copy (default: none — skipped)
+#   TRIAGE_ORG=<key> the registry key for that org, if it differs from ORG
+#   EXTRA_ENV="a.env b.env"  cross-org env files to copy too (none by default)
+#   TRIAGE_DIR=<path>         source registry (defaults to ~/secrets/triage or ~/secrets/<org>/triage)
 #
 # Knobs: DEFAULT_PROVIDER, DEFAULT_MODEL, PI_PACKAGES, PI_AUTH_PROVIDERS,
 #        PI_MODEL_PROVIDERS, GH_ACCOUNT, GH_EMAIL, MACHINE_NAME, SKILLS_REPO,
@@ -111,20 +114,84 @@ if [ -n "${HOST:-}" ] && [ "${REMOTE:-0}" != 1 ]; then
   if [ "${SKIP_SECRETS:-0}" != 1 ] && [ -z "$ORG" ]; then
     warn "ORG is not set — skipping the org configuration copy"
   elif [ "${SKIP_SECRETS:-0}" != 1 ]; then
-    mkdir -p "$stage/secrets/$ORG" "$stage/secrets/env"
-    [ -f "$LOCAL_SECRETS/org-config.json" ] && cp "$LOCAL_SECRETS/org-config.json" "$stage/secrets/"
-    [ -f "$LOCAL_SECRETS/$ORG/reviewers.json" ] && cp "$LOCAL_SECRETS/$ORG/reviewers.json" "$stage/secrets/$ORG/"
-    [ -f "$LOCAL_SECRETS/$ORG/gitconfig-$ORG" ] && cp "$LOCAL_SECRETS/$ORG/gitconfig-$ORG" "$stage/secrets/$ORG/"
-    shopt -s nullglob
-    for f in "$LOCAL_SECRETS"/env/*.env; do
-      case "$(basename "$f")" in
-        *"$ORG"*|cage-config.env|chrome-profiles.env|atlassian.env) cp "$f" "$stage/secrets/env/" ;;
-      esac
-    done
-    shopt -u nullglob
-    for t in "$LOCAL_SECRETS/triage" "$LOCAL_SECRETS/$ORG/triage"; do [ -d "$t" ] && cp -R "$t" "$stage/secrets/" && break; done
-  fi
+    # Only this org's slice goes to the target. Never the whole org-config (it
+    # holds every org), never the whole triage registry (an account file per org),
+    # and never the cross-org helpers (cage-config / chrome-profiles / atlassian)
+    # unless the caller asks for them via EXTRA_ENV.
+    ORG="$ORG" TRIAGE_ORG="${TRIAGE_ORG:-$ORG}" LOCAL_SECRETS="$LOCAL_SECRETS" STAGE="$stage" \
+    EXTRA_ENV="${EXTRA_ENV:-}" TRIAGE_SRC="${TRIAGE_SRC:-${TRIAGE_DIR:-}}" python3 - <<'PY'
+import json, os, pathlib, re, shutil, sys
 
+org = os.environ["ORG"]; torg = os.environ["TRIAGE_ORG"]
+secrets = pathlib.Path(os.environ["LOCAL_SECRETS"]); stage = pathlib.Path(os.environ["STAGE"])
+dest = stage / "secrets"; (dest / "env").mkdir(parents=True, exist_ok=True); (dest / org).mkdir(parents=True, exist_ok=True)
+
+def load(p):
+    t = p.read_text()
+    t = re.sub(r'^\s*/\*.*?\*/\s*', '', t, flags=re.S)   # the registry allows a leading /* */
+    return json.loads(t)
+
+note = []
+cfg = secrets / "org-config.json"
+if cfg.exists():
+    d = load(cfg)
+    orgs = d.get("orgs") or []
+    keep = [o for o in orgs if org in (o.get("org"), o.get("githubOrg"))]
+    if keep:
+        meta = {k: v for k, v in d.items() if k != "orgs"}
+        meta["orgs"] = keep
+        (dest / "org-config.json").write_text(json.dumps(meta, indent=2) + "\n")
+        note.append(f"org-config.json (1 of {len(orgs)} orgs)")
+    else:
+        note.append(f"org-config.json (no entry for '{org}' — skipped)")
+
+for name, src in (("reviewers.json", secrets / org / "reviewers.json"),
+                  (f"gitconfig-{org}", secrets / org / f"gitconfig-{org}")):
+    if src.exists():
+        shutil.copy2(src, dest / org / name); note.append(f"{org}/{name}")
+
+extra = {e for e in os.environ.get("EXTRA_ENV", "").split() if e}
+envdir = secrets / "env"
+if envdir.is_dir():
+    for f in sorted(envdir.glob("*.env")):
+        if org.lower() in f.name.lower() or f.name in extra:
+            shutil.copy2(f, dest / "env" / f.name); note.append(f"env/{f.name}")
+
+cands = [pathlib.Path(os.environ["TRIAGE_SRC"])] if os.environ.get("TRIAGE_SRC") else []
+cands += [secrets / "triage", secrets / org / "triage"]
+src_triage = next((c for c in cands if c.is_dir()), None)
+if src_triage is None:
+    note.append("triage: NOT FOUND (set TRIAGE_DIR to its path)")
+else:
+    out = dest / "triage"; (out / "accounts").mkdir(parents=True, exist_ok=True)
+    # platforms.json only describes platforms — org-neutral, copy verbatim
+    if (src_triage / "platforms.json").exists():
+        shutil.copy2(src_triage / "platforms.json", out / "platforms.json")
+    oj = load(src_triage / "orgs.json") if (src_triage / "orgs.json").exists() else None
+    if isinstance(oj, dict):
+        mine = {k: v for k, v in oj.items() if k == torg}
+        if mine:
+            (out / "orgs.json").write_text(json.dumps(mine, indent=2) + "\n")
+            note.append(f"triage/orgs.json ({torg})")
+        else:
+            note.append(f"triage/orgs.json SKIPPED (no '{torg}' key)")
+    acc = src_triage / "accounts" / f"{torg}.json"
+    if acc.exists():
+        shutil.copy2(acc, out / "accounts" / acc.name); note.append(f"triage/accounts/{acc.name}")
+    bank = src_triage / "banks" / f"{torg}.json"
+    if bank.exists():
+        (out / "banks").mkdir(exist_ok=True); shutil.copy2(bank, out / "banks" / bank.name); note.append(f"triage/banks/{bank.name}")
+    st = src_triage / "state.json"
+    if st.exists():
+        s = load(st)
+        filt = {k: {kk: vv for kk, vv in (s.get(k) or {}).items() if kk.split("/")[0] == torg} for k in ("accounts", "banks")}
+        if any(filt.values()):
+            (out / "state.json").write_text(json.dumps(filt, indent=2) + "\n")
+            note.append(f"triage/state.json ({sum(len(v) for v in filt.values())} entries)")
+
+print("  staged: " + (", ".join(note) if note else "nothing"))
+PY
+  fi
   [ -f "$HOME/.config/zellij/config.kdl" ] && cp "$HOME/.config/zellij/config.kdl" "$stage/zellij.kdl"
   [ -d "$HOME/.config/nvim" ] && cp -R "$HOME/.config/nvim" "$stage/nvim"
 
