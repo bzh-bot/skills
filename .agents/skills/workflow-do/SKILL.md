@@ -86,7 +86,8 @@ never from argv quoting:
 | `WORKFLOW_STAGE=<name>` | `--stage <name>` — rerun one stage |
 | `WORKFLOW_FRESH=1` | `--fresh` — discard stale run state |
 | `WORKFLOW_PI_NAME` | fallback pi session name (`pi --name`) |
-| `WORKFLOW_PI_MODEL` | model pin (cage() default; stage panes inherit it too) |
+| `WORKFLOW_PI_MODEL` | model pin (default `ollama-cloud/deepseek-v4.1-flash:1017`, set by `cage()`; stage panes inherit it too) |
+| `WORKFLOW_PI_THINKING` | thinking level pin (default `max`, set by `cage()`; every stage pane and the failure fallback run at it) |
 | `WORKFLOW_FALLBACK_PI` | `1` (default) → hand over to pi on a non-zero exit; `0` → just exit |
 | `WORKFLOW_RUN_LOG` | run log (default `/tmp/workflow-do-run.log`) |
 | `WORKFLOW_RUN_ENV` | run state (default `/tmp/workflow-run.env`) |

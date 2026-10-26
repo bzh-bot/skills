@@ -62,7 +62,7 @@ if [ ! -d /chrome-profile/Default ]; then
 else
   echo "Chrome profile restored (persistent — login sessions preserved from previous run)"
 fi
-chown -R $(id -u):$(id -g) /chrome-profile $HOME/.agent-browser
+chown -R "${CAGE_UID:-1000}:${CAGE_GID:-1000}" /chrome-profile $HOME/.agent-browser
 
 # ── 3. Set NIRI_SOCKET if available ──
 # The host's /run/user/$uid is mounted, which contains the niri socket.
@@ -128,7 +128,11 @@ if [ "${CAGE_INTERCOM_BRIDGE:-1}" = "1" ] && command -v socat >/dev/null 2>&1; t
   _pid=$HOME/.pi/agent/intercom/broker.pid
   _lock=$HOME/.pi/agent/intercom/broker.spawn.lock
   mkdir -p $HOME/.pi/agent/intercom
-  chown -R $(id -u):$(id -g) $HOME/.pi/agent/intercom 2>/dev/null || true
+  # The entrypoint runs as root; chowning to $(id -u) would make this root-owned
+  # and the pi sessions (user pc) then cannot bind the bridge socket
+  # (Permission denied on bind — broke every cage until 2026-10-26).
+  chown -R "${CAGE_UID:-1000}:${CAGE_GID:-1000}" $HOME/.pi/agent/intercom 2>/dev/null || true
+  chmod 700 $HOME/.pi/agent/intercom 2>/dev/null || true
   # Remove any stale files pi's spawnBrokerIfNeeded may key off
   rm -f "$_sock" "$_pid" "$_lock"
   # Start the bridge as pc so the socket ends up owned by pc

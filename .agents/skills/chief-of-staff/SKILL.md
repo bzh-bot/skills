@@ -483,7 +483,10 @@ zellij action new-tab --name "<TICKET> workflow-do" -- \
    post-stage P12 friction scan looks for. The **model pin is `WORKFLOW_PI_MODEL`**, not
    prompt text: cage() defaults it to `ollama-cloud/deepseek-v4.1-flash:1017` (verified
    enabledModels entry; the un-versioned `deepseek-v4.1-flash` id is NOT enabled) and
-   exports it so stage panes launch with the same model.
+   exports it so stage panes launch with the same model. The companion pin
+   `WORKFLOW_PI_THINKING` defaults to `max` (user directive 2026-10-26: this model
+   ALWAYS runs at max thinking) and is passed as `--thinking max` to every stage pane
+   and to the failure-fallback pi.
 
    `WORKFLOW_PI_ARGS` is **legacy/manual only** — it was the one-quoted-argv prompt for
    the old in-cage supervisor pi session. The chief of staff kickoff no longer passes it: with

@@ -72,10 +72,21 @@ start_broker() {
 }
 
 start_bridge() {
-  command -v socat >/dev/null 2>&1 || { say "⚠️  intercom: socat missing (brew install socat)"; return 1; }
-  pkill -f "socat.*TCP-LISTEN:$PORT" 2>/dev/null
-  sleep 0.3
-  detach socat "TCP-LISTEN:$PORT,reuseaddr,fork" "UNIX-CONNECT:$SOCK"
+  if command -v socat >/dev/null 2>&1; then
+    pkill -f "socat.*TCP-LISTEN:$PORT" 2>/dev/null
+    sleep 0.3
+    detach socat "TCP-LISTEN:$PORT,reuseaddr,fork" "UNIX-CONNECT:$SOCK"
+  else
+    # Linux hosts frequently have no socat (Debian: apt install socat). The cage
+    # still dials TCP :$PORT, so fall back to a tiny node proxy — node is always
+    # present (nvm) on these machines.
+    local proxy="$(dirname "$SELF")/intercom-tcp-proxy.cjs"
+    [ -f "$proxy" ] || { say "⚠️  intercom: socat missing and $proxy not found"; return 1; }
+    say "🔊 intercom: socat missing — using node TCP proxy"
+    pkill -f "intercom-tcp-proxy.cjs" 2>/dev/null
+    sleep 0.3
+    INTERCOM_BRIDGE_PORT="$PORT" INTERCOM_SOCK="$SOCK" detach node "$proxy"
+  fi
   for _ in 1 2 3 4 5 6; do
     probe "127.0.0.1:$PORT" && return 0
     sleep 0.5

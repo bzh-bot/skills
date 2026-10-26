@@ -81,7 +81,7 @@ if [ "${WORKFLOW_CHECK:-}" = "1" ]; then
   echo "  flags:     ${FLAGS[*]:-<none>}"
   echo "  run log:   $RUN_LOG"
   echo "  run env:   $RUN_ENV"
-  echo "  fallback:  WORKFLOW_FALLBACK_PI=$FALLBACK_PI${NAME:+ name=$NAME}${WORKFLOW_PI_MODEL:+ model=$WORKFLOW_PI_MODEL}"
+  echo "  fallback:  WORKFLOW_FALLBACK_PI=$FALLBACK_PI${NAME:+ name=$NAME}${WORKFLOW_PI_MODEL:+ model=$WORKFLOW_PI_MODEL}${WORKFLOW_PI_THINKING:+ thinking=$WORKFLOW_PI_THINKING}"
   echo "  preflight: bash $SKILL_DIR/scripts/preflight.sh   (also: $SELF preflight)"
   echo "  chrome:    bash $SKILL_DIR/scripts/chrome.sh status|revive"
   printf '  command:   '
@@ -122,4 +122,4 @@ fi
 PI_PROMPT="workflow-do's deterministic run exited non-zero (code ${rc}); you are the FAILURE FALLBACK supervisor, not the run launcher. Read the run log (${RUN_LOG}) and the run env (${RUN_ENV}), diagnose the failure, fix the root cause, then relaunch the sequencer with the same mode and ref: node ${TSX} ${SCRIPT} --resume ${MODE} ${REF} (or --stage <name> to rerun a single stage). Do not loop or retry blindly. Do not change the PR's draft/ready state by hand — the ship-p8/build-fix stages own draft→ready (`gh pr ready` + verified isDraft=false) and the script re-checks it; a rerun of that stage is the correct fix. When the run completes, or when you are blocked and need a decision, message the chief-of-staff session with the intercom tool; if intercom is unavailable, skip it silently and report here instead."
 
 echo "   handing over to pi as the failure fallback (WORKFLOW_FALLBACK_PI=$FALLBACK_PI)…"
-exec pi ${NAME:+--name "$NAME"} ${WORKFLOW_PI_MODEL:+--model "$WORKFLOW_PI_MODEL"} "$PI_PROMPT"
+exec pi ${NAME:+--name "$NAME"} ${WORKFLOW_PI_MODEL:+--model "$WORKFLOW_PI_MODEL"} ${WORKFLOW_PI_THINKING:+--thinking "$WORKFLOW_PI_THINKING"} "$PI_PROMPT"

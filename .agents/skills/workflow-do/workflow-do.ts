@@ -89,9 +89,11 @@ const POLL_SECS = Number(process.env.WORKFLOW_POLL_SECS ?? '5')
 const STAGE_TIMEOUT = Number(process.env.WORKFLOW_STAGE_TIMEOUT ?? '0')
 const ASSUME_YES = process.env.WORKFLOW_ASSUME_YES === '1'
 
-// pi-intercom broker client (same import intercom-send.mts uses; mounted into cages)
+// pi-intercom broker client (same import intercom-send.mts uses; mounted into cages).
+// The home dir MUST be interpolated — a literal '$HOME/...' string is not expanded by
+// import() and threw "Cannot find package '$HOME'" on every notify (fixed 2026-10-23).
 const INTERCOM_CLIENT_PATH =
-  '$HOME/.pi/agent/npm/node_modules/pi-intercom/broker/client.ts'
+  `${process.env.HOME ?? ''}/.pi/agent/npm/node_modules/pi-intercom/broker/client.ts`
 
 // ── arg parsing ─────────────────────────────────────────────────────────────
 interface Args {
@@ -689,7 +691,7 @@ async function resolveReviewers(): Promise<void> {
   // cage runs mount the org's secrets dir at $HOME/secrets-org — fall back
   // to it when the org-config path is unresolved or missing there (the run org
   // key can differ from the org-config key, which can differ from the GitHub org)
-  const candidates = [secretsDir ? `${secretsDir}/reviewers.json` : '', '$HOME/secrets-org/reviewers.json']
+  const candidates = [secretsDir ? `${secretsDir}/reviewers.json` : '', `${process.env.HOME ?? ''}/secrets-org/reviewers.json`]
     .filter((p, i, a) => p !== '' && a.indexOf(p) === i)
   const reviewersPath = candidates.find((p) => existsSync(p)) ?? ''
   const failMissing = async (why: string): Promise<void> => {
@@ -1198,7 +1200,10 @@ function writeTaskFile(stage: StageName, extra: string): string {
 function launchPromptCmdline(stage: StageName, paneName: string, promptFile: string, taskFile: string): string {
   const model = process.env.WORKFLOW_PI_MODEL
   const modelFlag = model ? ` --model '${model}'` : ''
-  return `pi --name ${paneName}${modelFlag} 'Read ${SHARED_POLICY}, then ${promptFile}, then ${taskFile} — follow them in order'`
+  // Thinking level pin (user directive 2026-10-26): deepseek v4.1 flash always runs at max.
+  const thinking = process.env.WORKFLOW_PI_THINKING
+  const thinkingFlag = thinking ? ` --thinking '${thinking}'` : ''
+  return `pi --name ${paneName}${modelFlag}${thinkingFlag} 'Read ${SHARED_POLICY}, then ${promptFile}, then ${taskFile} — follow them in order'`
 }
 function buildPaneCmd(stage: StageName, paneName: string, promptFile: string, taskFile: string): string[] {
   // TS array literals replace the bash array — quoting is explicit and reviewable.
@@ -1215,6 +1220,7 @@ function buildPaneCmd(stage: StageName, paneName: string, promptFile: string, ta
       '-e', `WORKFLOW_TAB_ID=${process.env.WORKFLOW_TAB_ID ?? ''}`,
       '-e', `WORKFLOW_ORCH_SESSION=${ORCH_SESSION}`,
       '-e', `WORKFLOW_PI_MODEL=${process.env.WORKFLOW_PI_MODEL ?? ''}`,
+      '-e', `WORKFLOW_PI_THINKING=${process.env.WORKFLOW_PI_THINKING ?? ''}`,
       '-e', 'ZELLIJ=1',
       '-e', `ZELLIJ_SESSION_NAME=${process.env.ZELLIJ_SESSION_NAME ?? 'pi'}`,
       // No value: docker reads it from the new host pane's env (its own pane id),
@@ -1664,9 +1670,27 @@ const CHROME_PORT_SPAN = 90
 // minimum, recorded in the run env, and MEASURED afterwards by `chrome.sh viewport`.
 const CHROME_MIN_WINDOW_W = 1600
 const CHROME_MIN_WINDOW_H = 900
+/**
+ * The configured Chrome window size, resolved env-first then run-env.
+ *
+ * Both sources can be ABSENT as an empty string: `runVar()` returns '' for a key
+ * that is not in the run env yet (scout has not written it on a fresh run), and a
+ * launcher may export CHROME_WINDOW_SIZE="". `??` only falls through null/undefined,
+ * so the old `process.env.X ?? runVar(X) ?? '1920,1080'` chain resolved to '' on
+ * every run where neither side was set — the default was unreachable and the run
+ * died at start-up with `CHROME_WINDOW_SIZE is ""` (MDG-246 run, 2026-10-26).
+ * Treat '' (and whitespace) as absent so the documented default actually applies.
+ */
+function chromeWindowSizeRaw(): string {
+  const fromEnv = String(process.env.CHROME_WINDOW_SIZE ?? '').trim()
+  if (fromEnv) return fromEnv
+  const fromRunEnv = String(runVar('CHROME_WINDOW_SIZE') ?? '').trim()
+  if (fromRunEnv) return fromRunEnv
+  return '1920,1080'
+}
 /** "W,H" for --window-size, or '' when the configured value is below the video minimum. */
 function chromeWindowSize(): string {
-  const raw = String(process.env.CHROME_WINDOW_SIZE ?? runVar('CHROME_WINDOW_SIZE') ?? '1920,1080').trim()
+  const raw = chromeWindowSizeRaw()
   const m = /^(\d+)\s*[x,]\s*(\d+)$/i.exec(raw)
   const w = Number(m?.[1] ?? 0)
   const h = Number(m?.[2] ?? 0)
@@ -1790,7 +1814,7 @@ async function launchChromePane(force = false): Promise<void> {
   const windowSize = chromeWindowSize()
   if (!windowSize) {
     await fail(
-      `CHROME_WINDOW_SIZE is "${process.env.CHROME_WINDOW_SIZE ?? runVar('CHROME_WINDOW_SIZE') ?? ''}" — the run Chrome must be at least ${CHROME_MIN_WINDOW_W}x${CHROME_MIN_WINDOW_H} (the video tour films a 1600x900 frame). Set CHROME_WINDOW_SIZE=${CHROME_MIN_WINDOW_W},${CHROME_MIN_WINDOW_H} (or larger, e.g. 1920,1080) and relaunch.`,
+      `CHROME_WINDOW_SIZE is "${chromeWindowSizeRaw()}" — the run Chrome must be at least ${CHROME_MIN_WINDOW_W}x${CHROME_MIN_WINDOW_H} (the video tour films a 1600x900 frame). Set CHROME_WINDOW_SIZE=${CHROME_MIN_WINDOW_W},${CHROME_MIN_WINDOW_H} (or larger, e.g. 1920,1080) and relaunch.`,
     )
   }
   const piFrontendUrl = discoverPiFrontendUrl()
@@ -2262,8 +2286,24 @@ if (mode === 'review') {
     const ghOrg = /github\.com[:\/]([^/]+)\/([^/"'\s]+?)(?:\.git)?$/.exec(remoteUrl)?.[1] ?? ''
     if (ghOrg) appendState(RUN_ENV, { GITHUB_ORG: ghOrg })
   }
-  const reviewPlan: StageName[] = ['review-gather', 'review-audit', 'review-walkthrough']
-  if (resume) {
+  // review-verdict is part of the plan (not a trailing call): with the earlier shape a
+  // --resume whose three stages were all OK hit 'nothing left to run' and exited 0 BEFORE
+  // the verdict, so a resumed run could never post the review (bug found 2026-10-23).
+  const reviewPlan: StageName[] = ['review-gather', 'review-audit', 'review-walkthrough', 'review-verdict']
+  if (singleStage) {
+    // The documented failure-fallback remedy (`--stage <name>`) used to be silently
+    // discarded here: the review branch overwrote `plan` with the full reviewPlan, so a
+    // rerun of one stage actually restarted the whole review. Honour it, then continue
+    // with whatever follows it in plan order — the run must still finish (a fallback that
+    // stops after one stage leaves the run mid-flight while the chief of staff thinks it
+    // completed).
+    if (!reviewPlan.includes(singleStage as StageName)) {
+      await fail(`--stage ${singleStage} is not a review stage (expected one of: ${reviewPlan.join(', ')})`)
+    }
+    log(`single-stage intervention: ${singleStage} (then continue the review plan)`)
+    await runStage(singleStage as StageName)
+    plan = reviewPlan.slice(reviewPlan.indexOf(singleStage as StageName) + 1)
+  } else if (resume) {
     const done = completeStages(RUN_ENV)
     plan = reviewPlan.filter(s => !done.includes(s))
     log(`resume: remaining plan:${plan.length ? ' ' + plan.join(' ') : ' <none>'}`)
@@ -2272,12 +2312,13 @@ if (mode === 'review') {
     plan = reviewPlan
   }
   for (const stage of plan) await runStage(stage)
-  // Conditional local tour: only when the reviewer asked for it at the walkthrough
-  if (runVar('REVIEW_TOUR_NEEDED') === 'yes' && !completeStages(RUN_ENV).includes('tour')) {
-    log('reviewer requested a local tour → running tour stage')
-    await runStage('tour')
-  }
-  await runStage('review-verdict')
+  // NO build-mode tour stage here: review mode's tour is the read-only, artifact-free
+  // in-pane tour run INSIDE review-walkthrough (workflow-do-review SKILL.md → "The review
+  // tour (optional, interactive)"), and REVIEW_TOUR_NEEDED=yes means exactly that — it was
+  // already done there. Launching the build `tour` stage from review mode was a bug: it
+  // requires BRIEF_FILE (a build artifact review mode never creates) so it aborted the run
+  // at 14:27:52 on 2026-10-23, and it would have produced before/after screenshots + video,
+  // which the review flow is explicitly forbidden to create.
   await appendRunStats()
   log('✅ review complete: verdict submitted, statuses updated')
   await notify(`workflow-do ${TICKET_LABEL}: review complete ✅`)

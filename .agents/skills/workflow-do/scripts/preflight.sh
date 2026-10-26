@@ -83,12 +83,12 @@ verdict() { # verdict CHECK STATE MESSAGE [REMEDIATION]
   record "$check" "$state" "${message}${fix:+ | fix: $fix}"
 }
 
-have_key() { # have_key FILE KEY — a non-empty assignment, ignoring comments
-  grep -qE "^[[:space:]]*$2=[^[:space:]]+" "$1" 2>/dev/null
+have_key() { # have_key FILE KEY — a non-empty assignment, ignoring comments; tolerates an `export ` prefix
+  grep -qE "^[[:space:]]*(export[[:space:]]+)?$2=[^[:space:]]+" "$1" 2>/dev/null
 }
 
 key_value() { # key_value FILE KEY — last value, quotes and CR stripped
-  sed -n "s/^[[:space:]]*$2=\(.*\)\$/\1/p" "$1" 2>/dev/null | tail -1 | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
+  sed -n "s/^[[:space:]]*\(export[[:space:]][[:space:]]*\)\?$2=\(.*\)\$/\2/p" "$1" 2>/dev/null | tail -1 | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
 }
 
 REPO="${WORKFLOW_CWD:-}"
@@ -274,27 +274,58 @@ if [ -z "$CDP_PORT" ] || [ "$CDP_PORT" = "0" ]; then
 elif ! curl -s --max-time 2 "http://127.0.0.1:$CDP_PORT/json/version" 2>/dev/null | grep -q '"Browser"'; then
   verdict browser-github SKIP "run Chrome is down on CDP $CDP_PORT — start it with scripts/chrome.sh revive"
 else
-  CHROME_SESSION="$(runvar CHROME_SESSION)"
-  CHROME_SESSION="${CHROME_SESSION:-chrome-$(runvar TICKET_ID)}"
-  CHROME_XDG="$(runvar CHROME_XDG_DATA_HOME)"
-  CHROME_XDG="${CHROME_XDG:-/tmp/xdg-preflight}"
-  mkdir -p "$CHROME_XDG" 2>/dev/null || true
-  # Probe from a THROWAWAY session so the run's own daemon is never touched (the CLI
-  # binary can differ between the run script's PATH and a login shell's PATH, and a
-  # mismatched binary replaces the session's daemon). The probe only READS cookies —
-  # it never navigates — and its daemon is killed immediately: killing an ATTACHED
-  # daemon never stops the CDP Chrome (only a daemon-owned Chrome dies).
-  PROBE_SESSION="chrome-preflight-$(runvar TICKET_ID)"
-  COOKIES="$(XDG_DATA_HOME="$CHROME_XDG" agent-browser --session "$PROBE_SESSION" \
-    --cdp "http://127.0.0.1:$CDP_PORT" cookies get --url https://github.com 2>/dev/null)"
-  pidf="/run/user/1000/agent-browser/$PROBE_SESSION.pid"
-  [ -f "$pidf" ] && kill -9 "$(cat "$pidf")" 2>/dev/null
-  rm -f "/run/user/1000/agent-browser/$PROBE_SESSION."* 2>/dev/null || true
+  # Read the BROWSER-level cookie store for github.com straight over CDP
+  # (`Storage.getCookies`). This is read-only and never navigates, and it is the only
+  # correct probe: `agent-browser cookies get` is PAGE-scoped — its `--url` flag is a
+  # no-op for `get` — so it only ever returned the cookies of whatever tab happened to
+  # be in front. In a real run that was the ticket-tracker tab, so a Chrome that WAS
+  # signed in (PR page loaded, logged_in=yes) reported a false "NOT signed in to
+  # GitHub" FAIL and blocked the tour.
+  github_cookies_cdp() { # github_cookies_cdp PORT → name=value lines from the browser store
+    command -v node >/dev/null 2>&1 || return 1
+    CDP_COOKIE_PORT="$1" timeout 20 node --input-type=module - <<'NODE' 2>/dev/null
+const port = process.env.CDP_COOKIE_PORT
+const v = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()
+const ws = new WebSocket(v.webSocketDebuggerUrl)
+ws.onopen = () => ws.send(JSON.stringify({ id: 1, method: 'Storage.getCookies' }))
+ws.onmessage = (e) => {
+  const m = JSON.parse(e.data)
+  if (m.id !== 1) return
+  for (const c of m.result?.cookies ?? []) {
+    const d = c.domain.replace(/^\./, '')
+    if (d === 'github.com' || d.endsWith('.github.com')) console.log(`${c.name}=${c.value}`)
+  }
+  ws.close()
+}
+NODE
+  }
+  COOKIES="$(github_cookies_cdp "$CDP_PORT" || true)"
+  if [ -z "$COOKIES" ]; then
+    CHROME_SESSION="$(runvar CHROME_SESSION)"
+    CHROME_SESSION="${CHROME_SESSION:-chrome-$(runvar TICKET_ID)}"
+    CHROME_XDG="$(runvar CHROME_XDG_DATA_HOME)"
+    CHROME_XDG="${CHROME_XDG:-/tmp/xdg-preflight}"
+    mkdir -p "$CHROME_XDG" 2>/dev/null || true
+    # Fallback only (node absent, or the browser store read failed): probe from a
+    # THROWAWAY session so the run's own daemon is never touched (the CLI
+    # binary can differ between the run script's PATH and a login shell's PATH, and a
+    # mismatched binary replaces the session's daemon). The probe only READS cookies —
+    # it never navigates — and its daemon is killed immediately: killing an ATTACHED
+    # daemon never stops the CDP Chrome (only a daemon-owned Chrome dies).
+    PROBE_SESSION="chrome-preflight-$(runvar TICKET_ID)"
+    # NB: this fallback is page-scoped (the `--url` flag is ignored by `cookies get`), so
+    # it only sees GitHub cookies when the front tab happens to be on github.com.
+    COOKIES="$(XDG_DATA_HOME="$CHROME_XDG" agent-browser --session "$PROBE_SESSION" \
+      --cdp "http://127.0.0.1:$CDP_PORT" cookies get --url https://github.com 2>/dev/null)"
+    pidf="/run/user/1000/agent-browser/$PROBE_SESSION.pid"
+    [ -f "$pidf" ] && kill -9 "$(cat "$pidf")" 2>/dev/null
+    rm -f "/run/user/1000/agent-browser/$PROBE_SESSION."* 2>/dev/null || true
+  fi
   BUSER="$(printf '%s\n' "$COOKIES" | sed -n 's/^dotcom_user=//p' | head -1)"
   if printf '%s\n' "$COOKIES" | grep -q '^logged_in=yes$' && [ -n "$BUSER" ]; then
     verdict browser-github PASS "signed in as $BUSER (CDP $CDP_PORT)"
   else
-    verdict browser-github FAIL "the run Chrome is NOT signed in to GitHub (CDP $CDP_PORT)" \
+    verdict browser-github FAIL "the run Chrome is NOT signed in to GitHub (CDP $CDP_PORT) — the browser cookie store has no github.com session" \
       "sign in to github.com manually in the run Chrome window, then re-run scripts/preflight.sh"
   fi
 fi
