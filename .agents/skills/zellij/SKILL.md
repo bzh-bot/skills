@@ -96,9 +96,11 @@ The three artefacts must all exist on the host:
 `install.sh` provisions all three (pinned by `ZJ_RADAR_VERSION`) and the config
 alias it depends on. Diagnose by symptom:
 
-- **`zellij -l radar` → "layout not found"** — `layouts/radar.kdl` missing. Copy it
-  from `~/.local/share/zj-radar/zellij/layouts/` after `zj-radar run --print-cmd`
-  materializes that directory.
+- **`zellij -l radar` → "layout not found"** — `layouts/radar.kdl` missing;
+  `install.sh` writes a rail-only one. Do **not** copy zj-radar's own
+  `~/.local/share/zj-radar/zellij/layouts/radar.kdl`: it ends in `tab { pane }`, and a
+  bare `pane` is the default shell, so `Alt r` would open a blank terminal beside the
+  rail. Alt r wants `layout { tab name="radar" { pane { plugin location="radar" } } }`.
 - **Radar tab opens but is empty** — the plugin cannot read its wasm: check
   `plugins/zj_radar.wasm` exists and the `radar location=` alias in `config.kdl`
   points at it. Do **not** run `zj-radar setup --force`: it rewrites the

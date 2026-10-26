@@ -534,13 +534,27 @@ if command -v zj-radar >/dev/null 2>&1; then
     warn "no wasm under $ZJ_RADAR_DATA — the radar rail cannot load"
   fi
   # `zellij -l radar` (the Alt r binding) resolves this file from the user's config dir.
-  if [ -f "$ZJ_RADAR_DATA/layouts/radar.kdl" ] && [ ! -f "$ZJ_CFG/layouts/radar.kdl" ]; then
-    cp -f "$ZJ_RADAR_DATA/layouts/radar.kdl" "$ZJ_CFG/layouts/radar.kdl"
+  # Written here rather than copied: zj-radar ships its own radar.kdl for `zj-radar run`,
+  # and that file ends with `tab focus=true { pane }` — a bare `pane` is a default shell,
+  # so Alt r would open a status rail next to a blank terminal. Alt r wants the rail only.
+  if [ ! -f "$ZJ_CFG/layouts/radar.kdl" ]; then
+    cat > "$ZJ_CFG/layouts/radar.kdl" <<'RADAR_LAYOUT'
+// radar.kdl — the Alt-r target: the agent-status rail as a FULL TAB, nothing else.
+// NOT zj-radar's own layouts/radar.kdl: that one ends in `tab { pane }`, and a bare
+// `pane` spawns the default shell (correct for `zj-radar run`, wrong for Alt r).
+layout {
+    tab name="radar" focus=true {
+        pane {
+            plugin location="radar"
+        }
+    }
+}
+RADAR_LAYOUT
     echo "  layout  $ZJ_CFG/layouts/radar.kdl"
-  elif [ -f "$ZJ_CFG/layouts/radar.kdl" ]; then
-    echo "  layout  present"
   else
-    warn "no layouts/radar.kdl — Alt r will fail with 'layout not found'"
+    echo "  layout  present"
+    grep -qE '^\s*pane\s*$' "$ZJ_CFG/layouts/radar.kdl" \
+      && warn "layouts/radar.kdl has a bare 'pane' (default shell) — Alt r will also open a blank terminal"
   fi
   # The config must alias the plugin (`radar location="file:…/zj_radar.wasm"`) and
   # load it in the background. Hand-owned on purpose: zj-radar setup would flip
