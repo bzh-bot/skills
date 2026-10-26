@@ -6,8 +6,8 @@ F0 spread across beats is the number that correlates with "the voice keeps
 changing": ~35 Hz between beats is audible, <20 Hz reads as one narrator.
 
 Usage:  voice-stats.py <tts-dir> [--ext .wav]
-Run with a venv that has librosa (the qwen venv does):
-  ~/.local/share/qwen3-tts/venv/bin/python voice-stats.py out/tts
+Run with any venv that has librosa + soundfile (e.g. `uv run --with librosa --with soundfile`):
+  uv run --with librosa --with soundfile python voice-stats.py out/tts
 """
 import argparse
 import glob

@@ -58,7 +58,7 @@ URLs and whatever re-drives the BEFORE/AFTER states.
 
 ```bash
 VIDEO_PATH="$VIDEO_DIR/<slug>.mp4"   VIDEO_ATTACHED="1"   VIDEO_DURATION_S="<n>"
-VIDEO_NARRATION="qwen3-design/engineer"  VIDEO_AVATAR="mascot|pil|none"  VIDEO_MUSIC="<track|none>"
+VIDEO_NARRATION="phonon/Alfie"  VIDEO_AVATAR="mascot|pil|none"  VIDEO_MUSIC="<track|none>"
 VIDEO_DIAGRAMS="<n> (concept/architecture + erd when touchesDataModel)"
 VIDEO_MOTIVATION="<beat-id> — <the reported symptom, ≤8 words>"   # beat 1, from the ticket
 VIDEO_SKIP_NOTE=""                   # only when the human authorised a skip
@@ -124,11 +124,12 @@ each.
   PII) and the design choice a reviewer would ask about (idempotency, transactions,
   indexes, back-compat, rollback). One sentence each — not a lecture.
 - **Narration is data.** Copy lives in `storyboard.json`; scripts never invent text.
-- **Default voice: `--mode custom --speaker Ryan --stable --instruct ""`** (qwen3
-  CustomVoice; Aiden is the second choice, both are the English-native presets). The
-  empty `--instruct` is load-bearing — omitting it silently colours the delivery with
-  the Australian-engineer persona. Clone mode only when the human supplies a voice
-  asset; design mode only as an auditioning tool, never per-video. (`steps/3-narration.md`.)
+- **Default voice: `--voice Alfie`** on Phonon over Ollama (`scripts/tts-phonon.py`;
+  user-approved 2026-10-26). Phonon takes **no** style/speed/seed input — `voice` is
+  the speaker identity and delivery can only be changed by rewriting the line. It is
+  112 MB with no venv and no GPU; `scripts/install-phonon.sh` sets up the runtime
+  (Ollama >= 0.40.9 + the MLX overlay on Linux, without which the model refuses to
+  load). Legacy Qwen3-TTS stays available only if a human asks for it.
   Other backends (kokoro/piper) only when a human has explicitly chosen them.
 - **Default avatar: `assets/avatar.svg`**, animated (Rhubarb mouth + blink + a
   gentle bob). Fall back to `pil` or none only when asked — and say so in the
@@ -183,7 +184,9 @@ scripts/
                              seed the run's DB + API base, record URLs, gate with `require`
   capture-beats.mjs      V2  storyboard → seg/*.mp4 + timeline.json (fake cursor, ripple, box modes);
                              validates the diagram contract and passes stills through
-  tts-qwen3.py           V3  clone|design|custom, --stable, per-beat instruct
+  tts-phonon.py          V3  **the narrator** — Phonon over Ollama /v1/audio/speech (no venv, no GPU)
+  install-phonon.sh      V3  Phonon-capable Ollama (>= 0.40.9 + MLX overlay), pulls the model
+  tts-qwen3.py           V3  legacy: clone|design|custom, --stable, per-beat instruct
   tts-kokoro.py          V3  Kokoro-82M, CPU                            (fallback)
   tts-piper.sh           V3  Piper, instant                             (draft)
   voice-stats.py         V3  per-beat pitch picture (F0 spread)

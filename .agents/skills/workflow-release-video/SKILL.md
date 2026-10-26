@@ -155,7 +155,7 @@ not restate the traps (there are twenty of them and they are all still live).
 - **Capture the live page (`agent-browser stream`), never `agent-browser record`** —
   `record` re-creates the context and films a `/login` redirect.
 - **Narration is data, and `storyboard.json` is its source — but the render reads `timeline.json`.**
-  `capture-beats.mjs` copies each beat into `timeline.json`, and **both** `tts-qwen3.py` and
+  `capture-beats.mjs` copies each beat into `timeline.json`, and **both** `tts-phonon.py` and
   `compose-video.mjs` read the *timeline*. So a narration, caption or divider edit made in
   the storyboard **after** a capture is silently invisible: the render simply uses the old
   text, with no warning. This shipped one revision of stale audio on 11 of 19 beats in the

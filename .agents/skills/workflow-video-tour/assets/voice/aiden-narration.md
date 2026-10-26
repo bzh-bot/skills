@@ -1,3 +1,10 @@
+# LEGACY (pre-2026-10-26) — the Qwen3-TTS Aiden narrator
+
+The workflow-video-tour default is now **Phonon voice `Alfie`** (see
+`steps/3-narration.md`). Phonon accepts no style/instruct text, so the per-beat
+`Delivery:` clauses below cannot be reproduced on it; they are kept only for the
+legacy `tts-qwen3.py` path.
+
 # Approved narration voice — Aiden + per-beat delivery
 
 Synthetic — no human recording, no personal data. Qwen3-TTS 1.7B **CustomVoice**

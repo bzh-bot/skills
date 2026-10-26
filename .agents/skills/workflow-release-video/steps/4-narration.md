@@ -5,7 +5,7 @@
 ## Before you render: sync the storyboard into the timeline
 
 **Do this first, or the render silently ignores every script edit you have made since the
-capture.** `capture-beats.mjs` copies each beat into `timeline.json`, and `tts-qwen3.py`
+capture.** `capture-beats.mjs` copies each beat into `timeline.json`, and `tts-phonon.py`
 reads the *timeline* — not `storyboard.json`. A narration, caption or divider edit that
 lands in the storyboard after R3 is invisible here, and nothing warns you: the build simply
 speaks the previous revision. In an early release video that shipped stale audio
@@ -30,13 +30,14 @@ unchanged; what changes at 26 beats is how much the identity and sizing checks m
 
 ```bash
 S=~/.agents/skills/workflow-video-tour
-export QWEN3_ROOT=~/.cache/qwen3-tts
+# Phonon: no venv, no GPU — see workflow-video-tour/steps/3-narration.md.
+# scripts/install-phonon.sh sets up Ollama >= 0.40.9 + the MLX overlay (Linux).
 export TORCH_DISABLE_NATIVE_JIT=1
-~/.cache/qwen3-tts/venv/bin/python $S/scripts/tts-qwen3.py \
+python3 $S/scripts/tts-phonon.py --voice Alfie \
   --mode custom --speaker Aiden --stable --instruct "" \
   --timeline "$VIDEO_DIR/timeline.json" --out "$VIDEO_DIR/tts"
-~/.cache/qwen3-tts/venv/bin/python $S/scripts/voice-identity.py "$VIDEO_DIR/tts"
-~/.cache/qwen3-tts/venv/bin/python $S/scripts/voice-stats.py    "$VIDEO_DIR/tts"
+python3 $S/scripts/voice-stats.py "$VIDEO_DIR/tts"
+python3 $S/scripts/voice-stats.py "$VIDEO_DIR/tts"
 ```
 
 Output is one `<beat-id>.wav` per narrated beat (including cards). `compose-video.mjs`

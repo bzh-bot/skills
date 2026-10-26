@@ -18,8 +18,9 @@ different person).
 
 Usage:
   voice-identity.py <tts-dir> [--ext .wav] [--json out.json]
-Needs librosa + soundfile (the qwen venv has them):
-  ~/.local/share/qwen3-tts/venv/bin/python voice-identity.py "$VIDEO_DIR/tts"
+Needs librosa + soundfile:
+  uv run --with librosa --with soundfile python voice-identity.py "$VIDEO_DIR/tts"
+(Under Phonon one `voice` value is one speaker, so this is a sanity check, not a gate.)
 """
 import argparse
 import glob

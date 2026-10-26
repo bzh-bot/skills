@@ -67,7 +67,7 @@
       "name": "Narration",
       "doc": "steps/4-narration.md",
       "reuses": "workflow-video-tour/steps/3-narration.md",
-      "script": "workflow-video-tour/scripts/tts-qwen3.py",
+      "script": "workflow-video-tour/scripts/tts-phonon.py",
       "out": [
         "tts/*.wav",
         "budget.json#measuredS"
