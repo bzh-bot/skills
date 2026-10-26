@@ -1012,6 +1012,23 @@ if [ -d "$SOURCE_REPO/secrets" ] && [ ! -e "$WORKTREE/secrets" ]; then
     cp -RL "$SOURCE_REPO/secrets/." "$WORKTREE/secrets/"
   )
 fi
+
+# The machine's canonical secrets live at $HOME/secrets (shared by every repo and
+# worktree). Repositories whose secrets system reads `secrets/bootstrap.env`
+# (e.g. modge's `pnpm secrets:setup`) get it seeded from there, so a fresh
+# worktree never stops at an empty bootstrap. Copy, never symlink: the setup
+# command rewrites the directory, and a link would edit the machine-wide file.
+# Copy ONLY the bootstrap + vault — $HOME/secrets also holds the agent's own org
+# config, triage registry and env files, which must never enter a worktree.
+if [ -d "$HOME/secrets" ] && [ ! -e "$WORKTREE/secrets/bootstrap.env" ]; then
+  (
+    umask 077
+    mkdir -p "$WORKTREE/secrets"
+    for f in bootstrap.env modge-secrets.kdbx; do
+      [ -f "$HOME/secrets/$f" ] && cp -L "$HOME/secrets/$f" "$WORKTREE/secrets/$f"
+    done
+  )
+fi
 ```
 
 Check the repository root's package scripts and setup documentation for a command that prepares or extracts secrets. Discover the command from the repository; do not assume a fixed name. Run it from the worktree root after dependencies are installed in P3.5 and before starting the database or dev servers. A copied vault may already exist; let the repository's setup command handle it. Verify setup succeeds and creates the environment files needed by the chosen local startup commands. Do not print secret values or commit the copied directory or generated environment files.
