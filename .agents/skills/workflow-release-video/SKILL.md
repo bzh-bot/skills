@@ -31,6 +31,13 @@ differ for a release:
 
 ## Contract
 
+**Prerequisites are the tour's, and `install.sh` provisions them on a fresh
+machine/cage** — `ffmpeg` + fonts, `agent-browser` with its own Chrome (headless is
+fine), the pinned `mmdc` from `setup-mermaid.sh`, and the Phonon runtime on `:11499`
+with `PHONON_HOST` / `MMDC_CHROME` exported. See
+`workflow-video-tour/SKILL.md` → Prerequisites. If one is missing, fix the installer
+rather than installing by hand, so the next cage has it too.
+
 **IN** — a repository and a range:
 
 ```

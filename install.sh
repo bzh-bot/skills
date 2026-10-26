@@ -272,18 +272,25 @@ fi
 # 1. base packages -------------------------------------------------------------
 say "base packages"
 missing=""
-for b in jq git curl rsync wget; do command -v "$b" >/dev/null 2>&1 || missing="$missing $b"; done
-if [ -n "$missing" ]; then
+for b in jq git curl rsync wget ffmpeg; do command -v "$b" >/dev/null 2>&1 || missing="$missing $b"; done
+# Fonts are for the video tours' chapter cards and annotation boxes; ffmpeg encodes
+# every clip, the narration bed and the music overlay.
+FONT_PKGS_NEEDED=""
+if command -v apt-get >/dev/null 2>&1 && ! fc-list 2>/dev/null | grep -qi 'dejavu sans'; then
+  FONT_PKGS_NEEDED="fonts-dejavu-core fonts-liberation"
+fi
+if [ -n "$missing" ] || [ -n "$FONT_PKGS_NEEDED" ]; then
   if command -v apt-get >/dev/null 2>&1; then
     sudo_if_needed apt-get update -qq 2>/dev/null || apt-get update -qq
-    sudo_if_needed env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $missing >/dev/null
+    sudo_if_needed env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $missing $FONT_PKGS_NEEDED >/dev/null
   elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y -q $missing >/dev/null
+    dnf install -y -q $missing google-noto-sans-fonts >/dev/null
   else
     warn "no package manager for:$missing"
   fi
 fi
 command -v jq >/dev/null && echo "  jq    $(jq --version)"
+command -v ffmpeg >/dev/null && echo "  ffmpeg $(ffmpeg -version | head -1 | cut -d' ' -f1-3)" || warn "ffmpeg missing — video tours/release videos cannot assemble"
 
 # 2. gh ------------------------------------------------------------------------
 if command -v gh >/dev/null 2>&1; then
@@ -392,6 +399,99 @@ else
 fi
 bash "$SKILLS_DIR/install.sh" --skills --copy 2>&1 | tail -2
 echo "  skills $(ls "$DEST" 2>/dev/null | wc -l)"
+
+# 5b. browser, speech, and video tooling --------------------------------------
+# The video skills (workflow-do-tour, workflow-release-video) and every flow that
+# drives a real site need these; without them a cage half-runs a tour and then stops.
+# All three checks are cheap and idempotent, so a re-run only fills the gaps.
+VTOUR="$SKILLS_DIR/.agents/skills/workflow-video-tour"
+[ -d "$VTOUR" ] || VTOUR="$DEST/workflow-video-tour"
+
+say "browser (agent-browser + headless Chrome)"
+if command -v agent-browser >/dev/null 2>&1; then
+  echo "  $(agent-browser --version 2>/dev/null | head -1)"
+else
+  # npm >= 11 blocks lifecycle scripts unless allowed by name, and agent-browser's
+  # postinstall is what stages the CLI's own browser download.
+  npm i -g --allow-scripts=agent-browser agent-browser >/dev/null 2>&1 \
+    || npm i -g agent-browser >/dev/null 2>&1 \
+    || warn "agent-browser install failed"
+  command -v agent-browser >/dev/null && echo "  $(agent-browser --version 2>/dev/null | head -1)"
+fi
+CHROME_BIN="$(ls -d "$HOME"/.agent-browser/browsers/chrome-*/chrome-linux64/chrome 2>/dev/null | tail -1)"
+if [ -n "$CHROME_BIN" ]; then
+  echo "  chrome  $(basename "$(dirname "$(dirname "$CHROME_BIN")")")"
+else
+  say "downloading Chrome for agent-browser"
+  agent-browser install >/dev/null 2>&1 || agent-browser install --with-deps >/dev/null 2>&1 \
+    || warn "chrome download failed"
+  CHROME_BIN="$(ls -d "$HOME"/.agent-browser/browsers/chrome-*/chrome-linux64/chrome 2>/dev/null | tail -1)"
+  [ -n "$CHROME_BIN" ] && echo "  chrome  $(basename "$(dirname "$(dirname "$CHROME_BIN")")")" \
+    || warn "no Chrome under ~/.agent-browser/browsers — mermaid renders and live capture will fail"
+fi
+# mmdc's puppeteer renders the diagrams with the same Chrome the capture uses.
+if [ -n "$CHROME_BIN" ]; then
+  grep -q '^export MMDC_CHROME=' "$HOME/.bashrc" 2>/dev/null \
+    || echo "export MMDC_CHROME=\"$CHROME_BIN\"" >> "$HOME/.bashrc"
+fi
+
+say "speech (Phonon, voice Easton)"
+PHONON_PORT="${PHONON_PORT:-11499}"
+PHONON_URL="http://127.0.0.1:$PHONON_PORT"
+if curl -sf -m 3 "$PHONON_URL/api/tags" >/dev/null 2>&1; then
+  echo "  phonon up on :$PHONON_PORT"
+elif [ -x /opt/ollama-phonon/bin/ollama ] && [ -x "$VTOUR/scripts/tts-phonon.py" ]; then
+  say "starting the phonon service on :$PHONON_PORT"
+  if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    sudo_if_needed tee /etc/systemd/system/ollama-phonon.service >/dev/null <<UNIT
+[Unit]
+Description=Ollama Phonon TTS for narration
+After=network-online.target
+
+[Service]
+ExecStart=/opt/ollama-phonon/bin/ollama serve
+Environment=OLLAMA_HOST=0.0.0.0:$PHONON_PORT
+Environment=OLLAMA_MODELS=$HOME/.local/share/ollama-phonon/models
+Environment=LD_LIBRARY_PATH=/opt/ollama-phonon/lib
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    sudo_if_needed systemctl daemon-reload
+    sudo_if_needed systemctl enable --now ollama-phonon.service
+  else
+    OLLAMA_HOST="0.0.0.0:$PHONON_PORT" \
+      OLLAMA_MODELS="$HOME/.local/share/ollama-phonon/models" \
+      LD_LIBRARY_PATH=/opt/ollama-phonon/lib \
+      nohup /opt/ollama-phonon/bin/ollama serve >/tmp/ollama-phonon.log 2>&1 &
+  fi
+  for _ in $(seq 1 30); do curl -sf -m 2 "$PHONON_URL/api/tags" >/dev/null 2>&1 && break; sleep 1; done
+  echo "  phonon up on :$PHONON_PORT"
+elif [ -x "$VTOUR/scripts/install-phonon.sh" ]; then
+  say "installing Phonon (Ollama + MLX overlay + model)"
+  bash "$VTOUR/scripts/install-phonon.sh" --host-shared 2>&1 | tail -3 \
+    || warn "phonon install failed — narration will not render"
+else
+  warn "no phonon runtime and no install-phonon.sh — narration will not render"
+fi
+if [ -x "$VTOUR/scripts/tts-phonon.py" ]; then
+  grep -q '^export PHONON_HOST=' "$HOME/.bashrc" 2>/dev/null \
+    || echo "export PHONON_HOST=\"$PHONON_URL\"" >> "$HOME/.bashrc"
+  PHONON_HOST="$PHONON_URL" PHONON_VOICE=Easton timeout 120 python3 "$VTOUR/scripts/tts-phonon.py" --check >/dev/null 2>&1 \
+    && echo "  tts     ok (Easton)" || warn "tts check failed — run: PHONON_HOST=$PHONON_URL python3 $VTOUR/scripts/tts-phonon.py --check"
+fi
+
+say "video tooling (mermaid-cli)"
+if command -v mmdc >/dev/null 2>&1 || [ -x "$HOME/.local/share/mermaid-cli/node_modules/.bin/mmdc" ]; then
+  echo "  mmdc present"
+elif [ -x "$VTOUR/scripts/setup-mermaid.sh" ]; then
+  MMDC_CHROME="${CHROME_BIN:-${MMDC_CHROME:-}}" bash "$VTOUR/scripts/setup-mermaid.sh" 2>&1 | tail -3 \
+    || warn "mermaid-cli install failed — diagram beats cannot render"
+else
+  warn "no setup-mermaid.sh — diagram beats cannot render"
+fi
 
 # 6. neovim -------------------------------------------------------------------
 say "neovim"

@@ -38,6 +38,16 @@ configuration from the machine you ran it on: `~/secrets/org-config.json`,
 nothing private is copied; the script stays org-agnostic. Docker is installed only where the kernel allows it; an
 unprivileged container cannot run it.
 
+It also provisions the media/browser toolchain the video skills need, so a fresh cage
+can run `workflow-do-tour` or `workflow-release-video` without hand-installing anything:
+`ffmpeg` plus the DejaVu/Liberation fonts (clip encoding, chapter cards), the
+`agent-browser` CLI with its own headless Chrome (live capture, `--headed` starts Xvfb on
+a displayless box), the pinned `@mermaid-js/mermaid-cli` (diagram beats, rendered through
+that same Chrome via `MMDC_CHROME`), and the Ollama **Phonon** speech runtime on
+`:11499` for narration in the approved voice. Each step is idempotent and only fills
+gaps, and the two paths that matter are exported into `~/.bashrc`
+(`MMDC_CHROME`, `PHONON_HOST`).
+
 `gh` is the one step that needs a human: the device flow prints a code for
 `https://github.com/login/device`, and the browser has to already be signed in as
 that account. Check `gh api user` afterwards — a token for the wrong account is
@@ -120,8 +130,9 @@ parser or client: `workflow-video-tour/scripts/*.py` (TTS engines and avatar ren
 `triage-bank-account/scripts/backend_connect.py` (an XML-RPC client for the accounting
 backend). Both are opt-in: nothing else imports them.
 
-Other external commands the skills assume you have: `agent-browser`, `gh`, `docker`,
-`zellij`, `node`, `ffmpeg`, `jq`, `pi`.
+Other external commands the skills assume you have: `agent-browser` (with its own
+Chrome), `gh`, `docker`, `zellij`, `node`, `ffmpeg`, `jq`, `pi`, `mmdc`
+(`setup-mermaid.sh`), and a Phonon-capable Ollama on `PHONON_HOST` for narration.
 
 ## Writing one
 

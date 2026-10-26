@@ -47,6 +47,22 @@ design points that must be narrated for backend work.
 You are the tour worker that just ran P6/P7: the app, the DB and the signed-in
 Chrome are still up. Run V1–V7 now; the video is a deliverable, not a nicety.
 
+## Prerequisites
+
+`install.sh` in [mendeljacks/skills](https://github.com/mendeljacks/skills) provisions
+all of them on a fresh machine/cage, so check before installing by hand:
+
+| need | check | provisioned as |
+|---|---|---|
+| `ffmpeg` + DejaVu/Liberation fonts | `ffmpeg -version` | apt (`base packages`) |
+| `agent-browser` + its Chrome | `agent-browser --version` | npm global + `agent-browser install` |
+| mmdc 12.0.0 | `$HOME/.video-tools/mermaid-cli/node_modules/.bin/mmdc` | `scripts/setup-mermaid.sh` |
+| Phonon TTS (voice Easton) | `PHONON_HOST=… tts-phonon.py --check` | `scripts/install-phonon.sh --host-shared` (`:11499`) |
+| `MMDC_CHROME`, `PHONON_HOST` | `env | grep -E 'MMDC_CHROME|PHONON_HOST'` | exported into `~/.bashrc` |
+
+Headless Chrome is the default and is fine for capture; `--headed` starts a private
+Xvfb display where `Xvfb` is installed.
+
 ## Contract
 
 **IN** (already in your P6/P7 state): `TICKET_ID TICKET_URL PR_NUMBER PR_URL
