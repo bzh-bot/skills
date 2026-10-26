@@ -1,6 +1,6 @@
 ---
 name: workflow-do-prebuild
-version: 1.5.0
+version: 1.5.1
 description: "workflow-do sub-skill — phases P0–P3 (Access & Browser, Project Detection + Ticket Resolution, Groom/Grill, Workspace Setup + Draft PR). Loaded by a workflow-do worker session the script launches as a named zellij pane (pi --name), coordinated via pi-intercom. Not invoked directly."
 ---
 
@@ -998,28 +998,23 @@ echo "✅ Branch $BRANCH_NAME pushed to origin"
 
 **→ TaskUpdate: P3.3 → completed**
 
-### 3.4 Symlink Secrets
+### 3.4 Copy Repository Secrets
 
 **→ TaskUpdate: P3.4 → in_progress**
 
-```bash
-find "$SOURCE_REPO" -maxdepth 3 -name '.env' -type l -not -path '*/node_modules/*' | while read src; do
-  rel="${src#$SOURCE_REPO/}"
-  target="$(readlink "$src")"
-  mkdir -p "$(dirname "$WORKTREE/$rel")"
-  ln -sf "$target" "$WORKTREE/$rel"
-done
-```
-
-If source repo uses plain `.env` files (not symlinks), copy or symlink them:
+Copy the base repository's root-level `secrets/` directory into the new worktree at the same relative path. Use an independent copy, not symlinks: setup may replace the downloaded vault and generated files. Keep an existing worktree's secrets untouched when resuming.
 
 ```bash
-find "$SOURCE_REPO" -maxdepth 3 -name '.env' -type f -not -path '*/node_modules/*' | while read src; do
-  rel="${src#$SOURCE_REPO/}"
-  mkdir -p "$(dirname "$WORKTREE/$rel")"
-  ln -sf "$src" "$WORKTREE/$rel"
-done
+if [ -d "$SOURCE_REPO/secrets" ] && [ ! -e "$WORKTREE/secrets" ]; then
+  (
+    umask 077
+    mkdir -p "$WORKTREE/secrets"
+    cp -RL "$SOURCE_REPO/secrets/." "$WORKTREE/secrets/"
+  )
+fi
 ```
+
+Check the repository root's package scripts and setup documentation for a command that prepares or extracts secrets. Discover the command from the repository; do not assume a fixed name. Run it from the worktree root after dependencies are installed in P3.5 and before starting the database or dev servers. A copied vault may already exist; let the repository's setup command handle it. Verify setup succeeds and creates the environment files needed by the chosen local startup commands. Do not print secret values or commit the copied directory or generated environment files.
 
 **→ TaskUpdate: P3.4 → completed**
 
@@ -1068,6 +1063,8 @@ Common codegen patterns:
 **If a pre-commit hook fails with typecheck errors during Phase 4**, it is almost certainly because codegen wasn't run (or needs re-running after schema changes). Run `pnpm run generate` (or the project's equivalent) in the relevant workspace, then retry the commit. Do NOT bypass the hook with `--no-verify`.
 
 \*\* Use pnpm if there is a lock file for that or npm otherwise if it is a node project
+
+Run the root-level secrets setup command discovered in P3.4, if the repository provides one, and verify it succeeds before starting services.
 
 **→ TaskUpdate: P3.5 → completed**
 
