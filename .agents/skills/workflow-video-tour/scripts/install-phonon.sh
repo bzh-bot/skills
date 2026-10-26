@@ -12,6 +12,8 @@
 # Usage:
 #   scripts/install-phonon.sh              # system install to /usr/local (needs sudo)
 #   scripts/install-phonon.sh --user       # user install, own service on port 11435
+#   scripts/install-phonon.sh --host-shared # systemd unit on 0.0.0.0:11499 that every
+#                                          # cage can reach at host.docker.internal:11499
 #   scripts/install-phonon.sh --check      # verify an existing runtime only
 #   OLLAMA_VERSION=v0.40.11 scripts/install-phonon.sh
 #
@@ -22,10 +24,12 @@ VERSION="${OLLAMA_VERSION:-v0.40.11}"   # first release with speech models
 MODEL="${PHONON_MODEL:-phonon}"
 MODE=system
 CHECK_ONLY=0
+SHARED_HOST=0
 PORT="${OLLAMA_PORT:-11434}"
 for arg in "$@"; do
   case "$arg" in
     --user) MODE=user; PORT="${OLLAMA_PORT:-11435}" ;;
+    --host-shared) SHARED_HOST=1; PORT="${OLLAMA_PORT:-11499}" ;;
     --check) CHECK_ONLY=1 ;;
     -h | --help) sed -n '2,25p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
@@ -178,6 +182,7 @@ if [ "$MODE" = "system" ]; then
   fi
   BIN="$prefix/bin/ollama"
   HOSTURL="http://127.0.0.1:$PORT"
+  OLLAMA_MODELS_DIR="${OLLAMA_MODELS:-$prefix/share/ollama-phonon/models}"
 else
   prefix="$HOME/.local"
   mkdir -p "$prefix/bin" "$prefix/lib" "$HOME/.config/systemd/user"
@@ -207,6 +212,7 @@ UNIT
   ok "user service ollama-phonon.service on port $PORT (export OLLAMA_HOST=127.0.0.1:$PORT)"
   BIN="$prefix/bin/ollama"
   HOSTURL="http://127.0.0.1:$PORT"
+  OLLAMA_MODELS_DIR="${OLLAMA_MODELS:-$prefix/lib/ollama-phonon/models}"
 fi
 
 for _ in $(seq 1 40); do
@@ -219,6 +225,32 @@ ok "server up: $("$BIN" --version | head -1)"
 info "pulling $MODEL (112 MB)"
 OLLAMA_HOST="$HOSTURL" "$BIN" pull "$MODEL"
 ok "model pulled"
+
+if [ "$SHARED_HOST" = "1" ]; then
+  # One runtime for every cage on this machine: bind all interfaces so
+  # host.docker.internal:<port> resolves from inside a container, and let systemd keep
+  # it alive. Cages export PHONON_HOST=http://host.docker.internal:<port>.
+  info "installing a shared-host unit on 0.0.0.0:$PORT"
+  SUDO=""; [ "$(id -u)" = "0" ] && SUDO="" || SUDO="sudo"
+  $SUDO tee /etc/systemd/system/ollama-phonon.service >/dev/null <<UNIT
+[Unit]
+Description=Ollama Phonon TTS for cage narration
+After=network-online.target
+
+[Service]
+ExecStart=$prefix/bin/ollama serve
+Environment=OLLAMA_HOST=0.0.0.0:$PORT
+Environment=OLLAMA_MODELS=$OLLAMA_MODELS_DIR
+Environment=LD_LIBRARY_PATH=$prefix/lib
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  $SUDO systemctl daemon-reload && $SUDO systemctl enable --now ollama-phonon.service
+  ok "ollama-phonon.service is up — cages use PHONON_HOST=http://host.docker.internal:$PORT"
+fi
 
 PHONON_HOST="$HOSTURL" python3 "$TTS" --check
 info "done — narrate with: PHONON_HOST=$HOSTURL python3 $TTS --timeline timeline.json --out tts-phonon"
