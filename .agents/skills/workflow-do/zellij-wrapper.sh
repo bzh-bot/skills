@@ -40,6 +40,16 @@ if [ -n "$WORKFLOW_ZELLIJ_TCP_PORT" ]; then
       forward_action "action" "$@"
       exit $?
       ;;
+    run)
+      # The sequencer launches every stage pane with `zellij --session <s> run
+      # --tab-id <n> --name <pane> …`, so `run` MUST be forwarded too — without
+      # this the wrapper exec'd zellij.real inside the cage (no server there) and
+      # every stage launch failed, killing each run into the pi fallback
+      # (2026-10-26).
+      shift
+      forward_action "run" "$@"
+      exit $?
+      ;;
     list-panes|list-tabs|list-sessions|list-clients)
       # Some non-action subcommands are usable via `action <same-name>` on the
       # host session. Forward them so scripts written for host-zellij work

@@ -13,6 +13,16 @@
 #
 set -e
 
+# ── 0. PATH ──
+# node/npm/pi and agent-browser live in nvm/global prefixes that only the login
+# shell's .bashrc puts on PATH. `docker exec ... bash -c` does not source it, and
+# the launcher's failure fallback died with "exec: pi: not found" until this was
+# explicit. Keep it for every shell mode and every cage user.
+for _nbin in "${HOME:-/home/agent}"/.nvm/versions/node/*/bin; do
+  [ -d "$_nbin" ] || continue
+  case ":$PATH:" in *":$_nbin:"*) ;; *) export PATH="$_nbin:$PATH" ;; esac
+done
+
 # ── 1. Start Docker daemon (DinD) ──
 # The cage container runs with --privileged so dockerd can create bridges,
 # cgroups, and iptables rules. This gives the cage its own isolated Docker
@@ -170,5 +180,24 @@ if [ "${CAGE_INTERCOM_BRIDGE:-1}" = "1" ] && command -v socat >/dev/null 2>&1; t
   fi
 fi
 
-# ── 5. Run main command as user pc ──
-exec gosu pc "$@"
+# ── 5. Run main command as the cage user ──
+# Default is the image's `pc` (UID 1000, matches a /home/<user> host). When the host
+# runs as root with HOME=/root, UID 1000 cannot traverse /root (0700) and therefore
+# cannot exec the skills (absolute symlinks into $HOME/src) or write the mounted
+# repos — cage() passes WORKFLOW_CAGE_USER=root for exactly that case, and the main
+# command has to honour it too, not just the intercom bridge above.
+_run_user="${WORKFLOW_CAGE_USER:-pc}"
+id "$_run_user" >/dev/null 2>&1 || _run_user=pc
+
+# Root host + root cage user: the skills, the sequencer and pi's tsx loader all
+# reference /root/... paths (HOME on the host), while this image mounts them at
+# /home/agent/.... Without these links the launcher dies before its first stage
+# and hands over to the failure fallback on every kickoff.
+if [ "$_run_user" = "root" ] && [ "${HOME:-}" != "/root" ] && [ -d /root ]; then
+  for _d in .agents .pi repos secrets .ssh .config .nvm .local .cache; do
+    [ -e "$HOME/$_d" ] || continue
+    [ -e "/root/$_d" ] && continue
+    ln -s "$HOME/$_d" "/root/$_d" 2>/dev/null || true
+  done
+fi
+exec gosu "$_run_user" "$@"
