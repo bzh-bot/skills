@@ -57,8 +57,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Full ffmpeg (distro build) — the npm ffmpeg-static build has NO drawtext/libfreetype,
     # so video-tour compose fails with "No such filter: 'drawtext'" (<KEY>, 2026-10-01).
     ffmpeg \
-    # C compiler for Triton (legacy qwen3-tts narration compiles CUDA kernels JIT) — without
-    # cc/clang triton dies with 'Failed to find C compiler' (<KEY>, 2026-10-01).
     gcc libc6-dev \
     # Offline SVG rasterization (rsvg-convert). Icon/brand regeneration must NEVER depend on
     # a per-run network fetch (`npx --yes sharp-cli`) — <KEY>/182 lost that path offline.

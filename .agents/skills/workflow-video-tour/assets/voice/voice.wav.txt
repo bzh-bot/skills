@@ -1,1 +1,0 @@
-Here's the gap. Client pays by bank transfer. The handler flips the invoice to pending — and then… nothing. No email. Nothing in the app. The owner finds out by refreshing the dashboard and hoping.

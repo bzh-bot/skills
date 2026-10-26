@@ -129,8 +129,9 @@ each.
   the speaker identity and delivery can only be changed by rewriting the line. It is
   112 MB with no venv and no GPU; `scripts/install-phonon.sh` sets up the runtime
   (Ollama >= 0.40.9 + the MLX overlay on Linux, without which the model refuses to
-  load). Legacy Qwen3-TTS stays available only if a human asks for it.
-  Other backends (kokoro/piper) only when a human has explicitly chosen them.
+  load). There is no other narration engine.
+  There is no second engine: if Phonon cannot run, fix the runtime or skip the video
+  with the human's consent (`steps/3-narration.md`).
 - **Default avatar: `assets/avatar.svg`**, animated (Rhubarb mouth + blink + a
   gentle bob). Fall back to `pil` or none only when asked — and say so in the
   PR body.
@@ -170,8 +171,7 @@ prompts/avatar-svg.md    brief/photo → a custom avatar.svg (optional, image-ca
 assets/
   avatar.svg             the mascot presenter (9 visemes + a blink pair)   ← V5 default
   music/house.mp3        the CC0 bed + .txt provenance line                ← V6 default
-  voice/aiden-narration.md  the approved narrator (Aiden + per-beat clauses) ← V3 default
-  voice/voice.wav        the frozen AU-engineer reference for clone mode + .txt transcript
+  tts-phonon.py             the narrator: Phonon voice Alfie (see steps/3-narration.md)
   voice/cues.sample.json 15-cue fixture for smoke-testing the frames script
   SOURCES.md             provenance of everything above (no personal media)
 scripts/
@@ -186,12 +186,8 @@ scripts/
                              validates the diagram contract and passes stills through
   tts-phonon.py          V3  **the narrator** — Phonon over Ollama /v1/audio/speech (no venv, no GPU)
   install-phonon.sh      V3  Phonon-capable Ollama (>= 0.40.9 + MLX overlay), pulls the model
-  tts-qwen3.py           V3  legacy: clone|design|custom, --stable, per-beat instruct
-  tts-kokoro.py          V3  Kokoro-82M, CPU                            (fallback)
-  tts-piper.sh           V3  Piper, instant                             (draft)
   voice-stats.py         V3  per-beat pitch picture (F0 spread)
-  voice-identity.py      V3  **is it the same speaker in every beat?** LPC formants + LTAS cosine
-  make-reference-clip.sh V3  recording → loudnormed ref WAV + transcript
+  voice-identity.py      V3  same speaker in every beat? LPC formants + LTAS cosine (sanity check)
   compose-video.mjs      V4  intro card + segments + narration → mp4 (+ video.json)
   revoice-video.mjs      V4  swap narration on a finished mp4
   avatar/avatar-visemes.sh    V5 Rhubarb cues from the finished mix

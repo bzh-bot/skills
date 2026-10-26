@@ -122,8 +122,9 @@ Capture specifics:
 - [ ] `frameW/frameH == viewportW/viewportH` on every beat
 - [ ] BEFORE beats really show pre-fix behaviour (open a `seg/b2-*.mp4` frame)
 - [ ] every non-UI surface beat shows the object/route/email **before and after**, not one state
-- [ ] every API beat is in Hoppscotch and every DB beat in CloudBeaver (not a terminal,
-      not a custom table); spreadsheet beats are in Google Sheets or the run stopped to ask
+- [ ] every API beat is in Hoppscotch and every DB beat in CloudBeaver (not Adminer,
+      not a terminal, not a custom table); spreadsheet beats are in Google Sheets or the
+      run stopped to ask
 - [ ] `framesPushed / (durationMs/1000) ≈ 30`
 
 Cost: 4–5 min for 6 beats.

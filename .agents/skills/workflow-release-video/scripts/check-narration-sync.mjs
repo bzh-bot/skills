@@ -3,13 +3,13 @@
 // anything a viewer hears or reads.
 //
 // Why this exists: `capture-beats.mjs` copies each beat into `timeline.json`, and
-// `tts-qwen3.py` and `compose-video.mjs` both read the *timeline*. Editing a narration,
+// `tts-phonon.py` and `compose-video.mjs` both read the *timeline*. Editing a narration,
 // caption, divider heading, bullet or footer in `storyboard.json` after a capture is
 // therefore invisible to the render — the first build of this release shipped audio that
 // was one revision behind the storyboard for 11 of 19 beats, and the only thing that
 // caught it was an ASR pass outside the cage.
 //
-// Run it before `tts-qwen3.py` and again before `compose-video.mjs`:
+// Run it before `tts-phonon.py` and again before `compose-video.mjs`:
 //
 //   node scripts/check-narration-sync.mjs storyboard.json timeline.json \
 //     && node scripts/sync-timeline-from-storyboard.mjs storyboard.json timeline.json

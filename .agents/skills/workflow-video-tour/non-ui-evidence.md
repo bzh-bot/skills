@@ -97,6 +97,10 @@ in the PR body — never fake a surface, never invent numbers.
   `127.0.0.1:8978` with the run's Postgres already configured as **Run DB (workflow)**.
   Open the connection → SQL editor. Do not `psql` into a terminal for the beat: a
   terminal is a formatting choice, CloudBeaver is the tool a reviewer recognises.
+  **⛔ Adminer is forbidden for DB beats (user directive 2026-10-26)** — not as a
+  fallback, and not because it was quicker to launch: MDG-174 improvised Adminer,
+  shipped ten annotated shots through it, and had to re-shoot every DB beat in
+  CloudBeaver. If `demo-tools.sh up` fails, fix it or stop and ask — do not substitute.
   **⛔ Do NOT demo through Supabase Studio** (or any Supabase-local-only console), even when the
   repo's *dev* stack happens to be Supabase: it is a dev-only vendor surface that the product does
   not ship, so it misrepresents the change to a reviewer (user directive 2026-10-16). When the dev

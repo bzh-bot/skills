@@ -32,11 +32,8 @@ unchanged; what changes at 26 beats is how much the identity and sizing checks m
 S=~/.agents/skills/workflow-video-tour
 # Phonon: no venv, no GPU — see workflow-video-tour/steps/3-narration.md.
 # scripts/install-phonon.sh sets up Ollama >= 0.40.9 + the MLX overlay (Linux).
-export TORCH_DISABLE_NATIVE_JIT=1
 python3 $S/scripts/tts-phonon.py --voice Alfie \
-  --mode custom --speaker Aiden --stable --instruct "" \
   --timeline "$VIDEO_DIR/timeline.json" --out "$VIDEO_DIR/tts"
-python3 $S/scripts/voice-stats.py "$VIDEO_DIR/tts"
 python3 $S/scripts/voice-stats.py "$VIDEO_DIR/tts"
 ```
 

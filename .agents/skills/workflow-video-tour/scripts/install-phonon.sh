@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # install-phonon.sh — give this machine a Phonon-capable Ollama (speech/TTS).
 #
-# Replaces install-qwen3-tts.sh: no 4.3 GB checkpoint, no torch venv, no GPU. Phonon
-# is a 112 MB Ollama model and the whole runtime is the Ollama binary plus (on Linux)
+# Phonon is a 112 MB Ollama model and the whole runtime is the Ollama binary plus (on Linux)
 # its MLX libraries — the server refuses to run Phonon without them:
 #
 #   Error: this model requires MLX support, but the MLX runtime is not available

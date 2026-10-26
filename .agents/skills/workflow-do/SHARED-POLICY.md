@@ -368,7 +368,7 @@ underlying state (route, `readyText`, dev server) instead of blindly re-running.
 
 - **Email / mail**: Mailpit
 - **APIs / endpoints**: Hoppscotch (self-hosted against the local API) or the backend's own OpenAPI UI
-- **Databases / schema**: a NEUTRAL SQL console against the DB the product actually runs — CloudBeaver / psql / DBeaver (the repo's own pgAdmin/Adminer only when it is not Supabase). **Never demo through Supabase Studio or the Supabase-local stack** (user directive 2026-10-16): it is a dev-only vendor surface the product does not ship. When the dev stack is Supabase, connect the neutral console to the same Postgres URL and film that.
+- **Databases / schema**: a NEUTRAL SQL console against the DB the product actually runs — CloudBeaver / psql / DBeaver (the repo's own pgAdmin/Adminer only when it is not Supabase). **Never demo through Supabase Studio or the Supabase-local stack** (user directive 2026-10-16): it is a dev-only vendor surface the product does not ship. When the dev stack is Supabase, connect the neutral console to the same Postgres URL and film that. **Adminer is never acceptable for a tour/release beat (user directive 2026-10-26)** — not as a fallback and not outside Supabase either: bring up CloudBeaver with `bash ~/.agents/skills/workflow-video-tour/scripts/demo-tools.sh up` and film its preconfigured `Run DB (workflow)` connection. A stage that improvises Adminer (MDG-174 did, and had to re-shoot every DB beat) is outside policy.
 - **Web / UI**: Chrome (via agent-browser — see the Chrome section below)
 - **Code diff (backend-only changes)**: VS Code for the Web (`github.dev/<org>/<repo>`) or the PR *Files changed* view
 - **Logs / jobs / traces**: Dozzle, a queue board, the org's APM

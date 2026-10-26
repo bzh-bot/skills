@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
 """tts-phonon.py — narrate a timeline with Phonon (Gradium TTS, Apache-2.0) over Ollama.
 
-Replaces tts-qwen3.py. Phonon is the speech model shipped by Ollama >= 0.40.9: 43M
-parameters, speech streamed from /v1/audio/speech, WAV 24 kHz mono out.
-
-Why it replaced Qwen3-TTS: Qwen needed a 4.3 GB checkpoint, a torch venv and a GPU
-(or slow CPU), and it sampled a fresh take per beat that had to be pinned with
---stable + a per-beat `instruct` clause to keep one speaker. Phonon is 112 MB, runs
-on CPU through a plain HTTP call (no venv, no torch), and the `voice` parameter is
-the speaker identity — the same value always returns the same person, so the
-voice-identity machinery is no longer load-bearing.
+Phonon is the speech model shipped by Ollama >= 0.40.9: 43M parameters, speech
+streamed from /v1/audio/speech, WAV 24 kHz mono out. It is 112 MB, runs on CPU
+through a plain HTTP call (no venv, no torch), and the `voice` parameter is the
+speaker identity — the same value always returns the same person.
 
 What is NOT supported, and the reason steps/3-narration.md was rewritten:
   * speed  — only 1 is accepted ("only speed 1 is supported")
