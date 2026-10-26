@@ -242,6 +242,50 @@ RUN printf '#!/bin/bash\n# Open a new zellij pane that execs into this cage cont
 COPY send-summary-email.sh /usr/local/bin/send-summary-email.sh
 RUN chmod +x /usr/local/bin/send-summary-email.sh
 
+# ── Phonon (TTS) — narration for the video tour ───────────────────────────────
+# Ollama >= 0.40.9 is what serves /v1/audio/speech, and on Linux Phonon refuses to
+# load without the release's MLX overlay libraries:
+#   "this model requires MLX support, but the MLX runtime is not available"
+# so both archives are fetched. Baked here so no cage ever downloads 1.5 GB mid-run
+# (a tour once spent 19 minutes compiling zstd from source for want of it).
+# Speed note: in-container MLX measured ~27 s per line vs ~0.7 s against a host
+# Ollama, so stages still prefer an external PHONON_HOST when one is reachable;
+# this copy is the any-host/offline fallback.
+ARG OLLAMA_VERSION=v0.40.11
+RUN apt-get update && apt-get install -y --no-install-recommends zstd \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /opt/ollama-phonon/bin /opt/ollama-phonon/lib /opt/ollama-phonon/models /tmp/phonon-build \
+ && curl -fsSL "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst" -o /tmp/phonon-build/main.tar.zst \
+ && curl -fsSL "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64-mlx.tar.zst" -o /tmp/phonon-build/mlx.tar.zst \
+ && tar --use-compress-program=unzstd -xf /tmp/phonon-build/main.tar.zst -C /tmp/phonon-build \
+ && tar --use-compress-program=unzstd -xf /tmp/phonon-build/mlx.tar.zst -C /tmp/phonon-build \
+ && cp /tmp/phonon-build/bin/ollama /opt/ollama-phonon/bin/ollama \
+ && cp -r /tmp/phonon-build/lib/. /opt/ollama-phonon/lib/ \
+ && chmod -R a+rX /opt/ollama-phonon \
+ && rm -rf /tmp/phonon-build \
+ && /opt/ollama-phonon/bin/ollama --version
+
+# LD_LIBRARY_PATH is load-bearing: without it the MLX loader reports
+# "failed to load MLX dynamic library (searched: [/opt/ollama-phonon/lib/ollama ...])"
+# even though libmlx.so sits in the mlx_cuda_v13 subdir below it.
+ENV PATH=/opt/ollama-phonon/bin:${PATH} \
+    LD_LIBRARY_PATH=/opt/ollama-phonon/lib \
+    OLLAMA_MODELS=/opt/ollama-phonon/models \
+    PHONON_MODEL=phonon \
+    PHONON_VOICE=Alfie
+
+# Seed the 112 MB model from a build context instead of pulling it here: `ollama pull`
+# validates the model against the MLX runtime, and a build container has no GPU, so a
+# build-time pull fails with "this model requires MLX support". The store is mounted
+# from the host (`--build-context phonon-models=<dir>`), so no blob lives in this repo.
+#   docker buildx build --build-context phonon-models=$HOME/.local/share/ollama-phonon/models ...
+RUN --mount=type=bind,from=phonon-models,target=/opt-phonon-seed,ro \
+    mkdir -p /opt/ollama-phonon/models \
+ && cp -r /opt-phonon-seed/. /opt/ollama-phonon/models/ \
+ && test -s /opt/ollama-phonon/models/manifests/registry.ollama.ai/library/phonon/latest \
+ && chmod -R a+rX /opt/ollama-phonon/models \
+ && echo "phonon model seeded ($(du -sh /opt/ollama-phonon/models | cut -f1))"
+
 # ── Entrypoint ──
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

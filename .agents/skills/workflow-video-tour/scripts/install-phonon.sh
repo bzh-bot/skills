@@ -57,8 +57,46 @@ has_speech() { # has_speech <binary> -> 0 when the model advertises the speech c
   [ "${caps:-0}" -ge 1 ]
 }
 
+# ── a baked runtime wins: cages ship one, so there is nothing to download ────
+# cage-base bakes Ollama 0.40.11 + the MLX overlay + the phonon model under
+# /opt/ollama-phonon. Containers have no systemd session (PID 1 is docker-init), so
+# the service path below cannot work there — start the server directly instead.
+BAKED=/opt/ollama-phonon/bin/ollama
+start_baked() {
+  local port="${1:-11434}"
+  info "using the baked runtime at /opt/ollama-phonon (no download)"
+  if curl -sf "http://127.0.0.1:$port/api/version" >/dev/null 2>&1; then
+    ok "a server is already listening on $port"
+  else
+    info "starting it (no systemd in this environment)"
+    OLLAMA_HOST="127.0.0.1:$port" OLLAMA_MODELS="${OLLAMA_MODELS:-/opt/ollama-phonon/models}" \
+      setsid nohup "$BAKED" serve >/tmp/ollama-phonon.log 2>&1 < /dev/null &
+    for _ in $(seq 1 45); do
+      curl -sf "http://127.0.0.1:$port/api/version" >/dev/null 2>&1 && break
+      sleep 1
+    done
+    curl -sf "http://127.0.0.1:$port/api/version" >/dev/null \
+      || die "the baked runtime did not come up — see /tmp/ollama-phonon.log"
+    ok "server up on $port"
+  fi
+  if ! OLLAMA_HOST="http://127.0.0.1:$port" "$BAKED" list 2>/dev/null | grep -q phonon; then
+    info "pulling the model (112 MB)"
+    OLLAMA_HOST="http://127.0.0.1:$port" "$BAKED" pull "$MODEL" || die "pull failed"
+  fi
+  PHONON_HOST="http://127.0.0.1:$port" python3 "$TTS" --check \
+    || die "the baked runtime does not serve speech"
+  exit 0
+}
+if [ -x "$BAKED" ] && [ "$CHECK_ONLY" != "1" ]; then
+  start_baked "$PORT"
+fi
+
 if [ "$CHECK_ONLY" = "1" ]; then
   info "checking an existing runtime on port $PORT"
+  if [ -x "$BAKED" ] && ! curl -sf "http://127.0.0.1:$PORT/api/version" >/dev/null 2>&1; then
+    info "baked runtime present but not running — starting it"
+    start_baked "$PORT"
+  fi
   command -v ollama >/dev/null || die "ollama is not on PATH"
   cv=$(client_version "$(command -v ollama)")
   sv=$(server_version "http://127.0.0.1:$PORT")

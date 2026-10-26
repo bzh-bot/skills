@@ -4,8 +4,21 @@
 OpenAI-compatible `/v1/audio/speech` route. **Voice: `Alfie`** (user-approved
 2026-10-26). There is no second narration engine in this skill.
 
+**In a cage there is nothing to install** — `cage-base` bakes Ollama 0.40.11 with the
+MLX overlay and the `phonon` model under `/opt/ollama-phonon`, and its `ENV` carries
+`PATH`, `LD_LIBRARY_PATH`, `OLLAMA_MODELS` and `PHONON_VOICE=Alfie`.
+`install-phonon.sh` notices the baked runtime and just starts it (containers have no
+systemd session, so it uses `setsid nohup … serve`), taking ~3 s.
+
+Measured, for choosing where to run it: in-cage MLX manages ~27 s per line (plus a
+~90 s model load on the first call) while a host Ollama answers in **0.7 s**. So when a
+host runtime is reachable, point the stage at it — the cage still works standalone:
+
 ```bash
-$S/scripts/install-phonon.sh                 # once per machine (sudo); --user = rootless, port 11435
+# preferred when the host serves Phonon (much faster)
+export PHONON_HOST=http://host.docker.internal:11499
+# otherwise the baked in-cage runtime, started on demand
+$S/scripts/install-phonon.sh --check
 python3 $S/scripts/tts-phonon.py --check      # runtime + model + one spoken line
 python3 $S/scripts/tts-phonon.py \
   --timeline "$VIDEO_DIR/timeline.json" --out "$VIDEO_DIR/tts" --voice Alfie
