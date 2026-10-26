@@ -131,12 +131,18 @@ if [ "${CAGE_INTERCOM_BRIDGE:-1}" = "1" ] && command -v socat >/dev/null 2>&1; t
   # The entrypoint runs as root; chowning to $(id -u) would make this root-owned
   # and the pi sessions (user pc) then cannot bind the bridge socket
   # (Permission denied on bind — broke every cage until 2026-10-26).
-  chown -R "${CAGE_UID:-1000}:${CAGE_GID:-1000}" $HOME/.pi/agent/intercom 2>/dev/null || true
+  # Resolve the user the bridge must run as. cage() sets WORKFLOW_CAGE_USER=root on this
+  # image (the default APP_USER is `agent`, not `pc`), and `gosu pc` failed hard on every
+  # cage until 2026-10-26: the bridge never bound, pi then spawned a CAGE-LOCAL broker and
+  # the run went intercom-blind (no handoffs, no gate asks, no finish notice).
+  _bridge_user="${WORKFLOW_CAGE_USER:-${APP_USER:-pc}}"
+  id "$_bridge_user" >/dev/null 2>&1 || _bridge_user=root
+  chown -R "$(id -u "$_bridge_user"):$(id -g "$_bridge_user")" $HOME/.pi/agent/intercom 2>/dev/null || true
   chmod 700 $HOME/.pi/agent/intercom 2>/dev/null || true
   # Remove any stale files pi's spawnBrokerIfNeeded may key off
   rm -f "$_sock" "$_pid" "$_lock"
-  # Start the bridge as pc so the socket ends up owned by pc
-  gosu pc nohup socat \
+  # Start the bridge as the cage user so the socket ends up owned by them
+  gosu "$_bridge_user" nohup socat \
     UNIX-LISTEN:"$_sock",fork,mode=666 \
     TCP:host.docker.internal:9458 \
     >/tmp/socat-intercom-cage.log 2>&1 &

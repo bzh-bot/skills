@@ -87,6 +87,11 @@ const STATUS_FILE = process.env.WORKFLOW_STATUS_FILE ?? '/tmp/workflow-run.statu
 const PREFLIGHT_ENV = process.env.WORKFLOW_PREFLIGHT_ENV ?? '/tmp/workflow-preflight.env'
 const POLL_SECS = Number(process.env.WORKFLOW_POLL_SECS ?? '5')
 const STAGE_TIMEOUT = Number(process.env.WORKFLOW_STAGE_TIMEOUT ?? '0')
+// The in-cage Unix account. cage-base creates APP_USER (default 'agent'); older
+// images used 'pc'. Every docker exec / pgrep / pkill targeting the stage process
+// must use the SAME name or the stage pane cannot be exec'd into and
+// stageProcessAlive() never sees the agent (killed every launch, 2026-10-26).
+const CAGE_USER = process.env.WORKFLOW_CAGE_USER || 'agent'
 const ASSUME_YES = process.env.WORKFLOW_ASSUME_YES === '1'
 
 // pi-intercom broker client (same import intercom-send.mts uses; mounted into cages).
@@ -1214,7 +1219,7 @@ function buildPaneCmd(stage: StageName, paneName: string, promptFile: string, ta
     // commands would run host-side where the run state files are invisible. Wrap
     // the command in docker exec to run the stage pi process inside the cage.
     paneCmd = [
-      'docker', 'exec', '-it', '-u', 'pc', '-w', process.env.WORKFLOW_CWD ?? '',
+      'docker', 'exec', '-it', '-u', CAGE_USER, '-w', process.env.WORKFLOW_CWD ?? '',
       '-e', `WORKFLOW_CWD=${process.env.WORKFLOW_CWD ?? ''}`,
       '-e', `WORKFLOW_CONTAINER_ID=${containerId}`,
       '-e', `WORKFLOW_TAB_ID=${process.env.WORKFLOW_TAB_ID ?? ''}`,
@@ -1272,7 +1277,7 @@ async function paneIdsByName(paneName: string): Promise<string[]> {
 // from matching the bash -c wrapper that carries it (a self-match killed a pane once).
 async function stageProcessAlive(paneName: string): Promise<boolean> {
   try {
-    const { stdout } = await sh(`pgrep -u pc -af "[p]i --name ${paneName}( |$)" || true`)
+    const { stdout } = await sh(`pgrep -u ${CAGE_USER} -af "[p]i --name ${paneName}( |$)" || true`)
     return Boolean(
       stdout
         .split(EOL)
@@ -1765,7 +1770,7 @@ async function discoverChromePort(): Promise<number> {
     /* fall through to /proc */
   }
   try {
-    const { stdout } = await sh(`pgrep -u pc -f "^/usr/bin/google-chrome.*user-data-dir=${chromeProfile()}" | head -1`)
+    const { stdout } = await sh(`pgrep -u ${CAGE_USER} -f "^/usr/bin/google-chrome.*user-data-dir=${chromeProfile()}" | head -1`)
     const pid = stdout.trim().split(EOL)[0]
     if (pid) {
       const arg = readFileSync(`/proc/${pid}/cmdline`, 'utf8')
@@ -1832,14 +1837,14 @@ async function launchChromePane(force = false): Promise<void> {
     `rm -f "${sessionProfile}"/SingletonLock "${sessionProfile}"/SingletonCookie "${sessionProfile}"/SingletonSocket "${sessionProfile}"/DevToolsActivePort`,
     // never leave competing daemons/Chromes for this session behind.
     // ⚠️ The pkill pattern MUST be anchored on the chrome executable. A bare
-    // `pkill -u pc -f "user-data-dir=<profile>"` also matches the wrapping shell that
+    // `pkill -u ${CAGE_USER} -f "user-data-dir=<profile>"` also matches the wrapping shell that
     // runs this very command — `bash -lc "<inner>"` carries the pattern text in its own
     // argv — so pkill SIGTERMs its own launcher, sh() sees a non-zero exit and the run
     // dies with "cannot launch the run Chrome" (diagnosed on <KEY-200>, 2026-10-07; it hit
     // every run entering prebuild). The wrapper cmdline starts with `bash -lc`, the
     // browser with the chrome binary path, so the anchor separates them.
-    `pkill -u pc -f "^/usr/bin/google-chrome.*user-data-dir=${sessionProfile}" 2>/dev/null || true`,
-    `pkill -u pc -f "^/opt/google/chrome/chrome.*user-data-dir=${sessionProfile}" 2>/dev/null || true`,
+    `pkill -u ${CAGE_USER} -f "^/usr/bin/google-chrome.*user-data-dir=${sessionProfile}" 2>/dev/null || true`,
+    `pkill -u ${CAGE_USER} -f "^/opt/google/chrome/chrome.*user-data-dir=${sessionProfile}" 2>/dev/null || true`,
     `sleep 1`,
     // Clear singleton state again AFTER the kills: a dying Chrome can re-write it, and
     // two mains on one user-data-dir never write DevToolsActivePort (<KEY>).
@@ -1895,7 +1900,7 @@ async function launchChromePane(force = false): Promise<void> {
   }
   let chromePid = ''
   try {
-    const { stdout } = await sh(`pgrep -u pc -f "^/usr/bin/google-chrome.*user-data-dir=${sessionProfile}" | head -1`)
+    const { stdout } = await sh(`pgrep -u ${CAGE_USER} -f "^/usr/bin/google-chrome.*user-data-dir=${sessionProfile}" | head -1`)
     chromePid = stdout.trim()
   } catch {
     /* pid is informational */
@@ -2191,8 +2196,11 @@ async function resolveGithubAccess(): Promise<void> {
   } catch {
     /* resolved below or FATAL */
   }
-  const tokenEnv = account ? `GH_TOKEN_${account}` : ''
-  const token = (tokenEnv && process.env[tokenEnv]) || ''
+  // GitHub logins commonly contain '-' (bzh-bot), which is NOT legal in a shell
+  // env var name — the token could never be provided under the raw name.
+  const tokenEnvName = (acct: string): string => `GH_TOKEN_${acct.replace(/[^A-Za-z0-9]/g, '_').toUpperCase()}`
+  const tokenEnv = account ? tokenEnvName(account) : ''
+  const token = (tokenEnv && (process.env[tokenEnv] || process.env[`GH_TOKEN_${account}`])) || ''
   const kv: Record<string, string> = {}
   if (ghOrg) kv.GITHUB_ORG = ghOrg
   if (account) { kv.GH_ACCOUNT = account; kv.GH_TOKEN_ENV = tokenEnv }
