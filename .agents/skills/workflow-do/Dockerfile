@@ -272,7 +272,7 @@ ENV PATH=/opt/ollama-phonon/bin:${PATH} \
     LD_LIBRARY_PATH=/opt/ollama-phonon/lib \
     OLLAMA_MODELS=/opt/ollama-phonon/models \
     PHONON_MODEL=phonon \
-    PHONON_VOICE=Alfie
+    PHONON_VOICE=Easton
 
 # Seed the 112 MB model from a build context instead of pulling it here: `ollama pull`
 # validates the model against the MLX runtime, and a build container has no GPU, so a

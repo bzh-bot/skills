@@ -1,7 +1,7 @@
 ---
 name: workflow-release-video
 version: 1.2.0
-description: "Produce a ~4 minute narrated release video for a repository — repo-agnostic, driven by the merged PRs between the last git tag and now. Collect the release, open on the reported problem in the reporters' own words (beat 1, from the release's tickets/issues), plan 7–9 chapters, render the mandatory Mermaid diagrams (product architecture up front, an ERD per chapter that touches the schema), capture the app live, narrate with the approved Phonon voice (Alfie), assemble with chapter cards + annotation boxes, and publish the MP4 to the GitHub Release. Reuses the workflow-video-tour engine (V1–V7) unchanged; adds a release collector, the motivation beat and a chaptered storyboard convention. Invoked directly, or by the chief of staff's release flow."
+description: "Produce a ~4 minute narrated release video for a repository — repo-agnostic, driven by the merged PRs between the last git tag and now. Collect the release, open on the reported problem in the reporters' own words (beat 1, from the release's tickets/issues), plan 7–9 chapters, render the mandatory Mermaid diagrams (product architecture up front, an ERD per chapter that touches the schema), capture the app live, narrate with the approved Phonon voice (Easton), assemble with chapter cards + annotation boxes, and publish the MP4 to the GitHub Release. Reuses the workflow-video-tour engine (V1–V7) unchanged; adds a release collector, the motivation beat and a chaptered storyboard convention. Invoked directly, or by the chief of staff's release flow."
 ---
 
 # Release video (R1–R7)
@@ -91,7 +91,7 @@ Rules that fall out of this:
   26–30 narrated beats.** The motivation is card #1 and is inside those counts.
 - **460–560 words of total narration** → 3:45 to 4:25. This is the number to count,
   not the per-beat number. The diagram lines are inside it.
-- **18–24 words per narrated beat** (Alfie measures ~3.0 words/s; digits spelled out
+- **18–24 words per narrated beat** (Easton measures ~3.0 words/s; digits spelled out
   are slow). At 20 words a filmed beat is 9.5 s, at 24 it is 11.1 s — either is fine, but
   you must multiply it out.
 - **2 filmed beats per chapter.** Three is better if the chapter is the headline feature
@@ -163,7 +163,7 @@ not restate the traps (there are twenty of them and they are all still live).
   **Run `scripts/check-narration-sync.mjs` before TTS and again before compose**, and
   `scripts/sync-timeline-from-storyboard.mjs` to push the storyboard's spoken/shown fields
   across without touching capture geometry. Step 4 owns the detail.
-- **Voice: `--voice Alfie` on Phonon** (the same engine and voice as the tour). Phonon
+- **Voice: `--voice Easton` on Phonon** (the same engine and voice as the tour). Phonon
   takes no style/speed input, so a beat's energy comes from its words; speaker
   identity is fixed by the voice value, so there is no drift to police at 26 beats.
 - **Music: always on, always licensed.** Attribution into the release body.

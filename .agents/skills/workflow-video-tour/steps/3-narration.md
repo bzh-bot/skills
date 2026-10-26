@@ -1,12 +1,12 @@
 # V3 — Narration → `tts/<beat>.wav`
 
 **Engine: Phonon** (Gradium TTS, Apache-2.0) on a local Ollama, through its
-OpenAI-compatible `/v1/audio/speech` route. **Voice: `Alfie`** (user-approved
-2026-10-26). There is no second narration engine in this skill.
+OpenAI-compatible `/v1/audio/speech` route. **Voice: `Easton`** (user pick, 2026-10-26 — changed
+from Alfie the same day). There is no second narration engine in this skill.
 
 **In a cage there is nothing to install** — `cage-base` bakes Ollama 0.40.11 with the
 MLX overlay and the `phonon` model under `/opt/ollama-phonon`, and its `ENV` carries
-`PATH`, `LD_LIBRARY_PATH`, `OLLAMA_MODELS` and `PHONON_VOICE=Alfie`.
+`PATH`, `LD_LIBRARY_PATH`, `OLLAMA_MODELS` and `PHONON_VOICE=Easton`.
 `install-phonon.sh` notices the baked runtime and just starts it (containers have no
 systemd session, so it uses `setsid nohup … serve`), taking ~3 s.
 
@@ -21,7 +21,7 @@ export PHONON_HOST=http://host.docker.internal:11499
 $S/scripts/install-phonon.sh --check
 python3 $S/scripts/tts-phonon.py --check      # runtime + model + one spoken line
 python3 $S/scripts/tts-phonon.py \
-  --timeline "$VIDEO_DIR/timeline.json" --out "$VIDEO_DIR/tts" --voice Alfie
+  --timeline "$VIDEO_DIR/timeline.json" --out "$VIDEO_DIR/tts" --voice Easton
 python3 $S/scripts/voice-stats.py "$VIDEO_DIR/tts"     # per-beat pitch picture
 ```
 
@@ -67,7 +67,7 @@ text can justify (`max(8 s, words/2.6) × 2.5`, 3 attempts).
    names are case- and accent-insensitive.
 2. Render the *same* line in each candidate and listen:
    ```bash
-   for v in Alfie Easton Preston Trevor; do
+   for v in Easton Easton Preston Trevor; do
      python3 $S/scripts/tts-phonon.py --text "<a real beat>" \
        --out-file /tmp/voice-$v.wav --voice "$v"
    done

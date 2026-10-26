@@ -58,7 +58,7 @@ URLs and whatever re-drives the BEFORE/AFTER states.
 
 ```bash
 VIDEO_PATH="$VIDEO_DIR/<slug>.mp4"   VIDEO_ATTACHED="1"   VIDEO_DURATION_S="<n>"
-VIDEO_NARRATION="phonon/Alfie"  VIDEO_AVATAR="mascot|pil|none"  VIDEO_MUSIC="<track|none>"
+VIDEO_NARRATION="phonon/Easton"  VIDEO_AVATAR="mascot|pil|none"  VIDEO_MUSIC="<track|none>"
 VIDEO_DIAGRAMS="<n> (concept/architecture + erd when touchesDataModel)"
 VIDEO_MOTIVATION="<beat-id> — <the reported symptom, ≤8 words>"   # beat 1, from the ticket
 VIDEO_SKIP_NOTE=""                   # only when the human authorised a skip
@@ -124,7 +124,7 @@ each.
   PII) and the design choice a reviewer would ask about (idempotency, transactions,
   indexes, back-compat, rollback). One sentence each — not a lecture.
 - **Narration is data.** Copy lives in `storyboard.json`; scripts never invent text.
-- **Default voice: `--voice Alfie`** on Phonon over Ollama (`scripts/tts-phonon.py`;
+- **Default voice: `--voice Easton`** on Phonon over Ollama (`scripts/tts-phonon.py`;
   user-approved 2026-10-26). Phonon takes **no** style/speed/seed input — `voice` is
   the speaker identity and delivery can only be changed by rewriting the line. It is
   112 MB with no venv and no GPU; `scripts/install-phonon.sh` sets up the runtime
@@ -171,7 +171,7 @@ prompts/avatar-svg.md    brief/photo → a custom avatar.svg (optional, image-ca
 assets/
   avatar.svg             the mascot presenter (9 visemes + a blink pair)   ← V5 default
   music/house.mp3        the CC0 bed + .txt provenance line                ← V6 default
-  tts-phonon.py             the narrator: Phonon voice Alfie (see steps/3-narration.md)
+  tts-phonon.py             the narrator: Phonon voice Easton (see steps/3-narration.md)
   voice/cues.sample.json 15-cue fixture for smoke-testing the frames script
   SOURCES.md             provenance of everything above (no personal media)
 scripts/

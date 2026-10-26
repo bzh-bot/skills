@@ -17,7 +17,7 @@ a likeness of anyone, and the narration voice is synthesised from a description.
 
 ## Narration
 
-The narration is `scripts/tts-phonon.py --voice Alfie`: Phonon synthesises every beat
+The narration is `scripts/tts-phonon.py --voice Easton`: Phonon synthesises every beat
 from its text on a local Ollama. There is no reference clip, no clone step and no
 frozen voice asset to maintain.
 

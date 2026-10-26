@@ -15,7 +15,7 @@ What is NOT supported, and the reason steps/3-narration.md was rewritten:
     is stable to the frame, so timing checks stay meaningful.
 
 Usage:
-  tts-phonon.py --timeline timeline.json --out tts-phonon [--voice Alfie]
+  tts-phonon.py --timeline timeline.json --out tts-phonon [--voice Easton]
   tts-phonon.py --text "one line" --out-file /tmp/line.wav
   tts-phonon.py --check           # verify the runtime + model, generate one line
 
@@ -35,7 +35,7 @@ import urllib.error
 import urllib.request
 import wave
 
-DEFAULT_VOICE = "Alfie"
+DEFAULT_VOICE = "Easton"
 DEFAULT_MODEL = "phonon"
 # Words per second Phonon actually produces, measured on the tour beat sets.
 # Used only to flag a runaway take, never to size the video (V4 fits video to voice).
