@@ -131,7 +131,8 @@ parser or client: `workflow-video-tour/scripts/*.py` (TTS engines and avatar ren
 backend). Both are opt-in: nothing else imports them.
 
 Other external commands the skills assume you have: `agent-browser` (with its own
-Chrome), `gh`, `docker`, `zellij`, `node`, `ffmpeg`, `jq`, `pi`, `mmdc`
+Chrome), `gh`, `docker`, `zellij`, `zj-radar` (plus its wasm and `layouts/radar.kdl` —
+`install.sh` provisions all three), `node`, `ffmpeg`, `jq`, `pi`, `mmdc`
 (`setup-mermaid.sh`), and a Phonon-capable Ollama on `PHONON_HOST` for narration.
 
 ## Writing one

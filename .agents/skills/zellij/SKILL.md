@@ -72,5 +72,44 @@ zellij action write-chars -p terminal_3 'text'
 - Keep the user's primary pane visible: add panes beside or stacked, never on
   top of it.
 
+## Radar (agent-status rail)
+
+`zj-radar` is the sidebar that shows each agent/pane's status. It is a separate
+program (CLI + `zj_radar.wasm` + a layout), **not** part of this repo, and a box
+without it has a broken `Alt r` and silent status reporting.
+
+```bash
+zj-radar --version                  # must match the cage image's ZJ_RADAR_VERSION
+zj-radar notify pi --status running # what the pi bridge extension calls
+zj-radar setup zellij --check      # inspect wiring without writing
+zellij -l radar                     # the Alt-r binding: new session with the rail
+```
+
+The three artefacts must all exist on the host:
+
+| artefact | path |
+|---|---|
+| CLI | `zj-radar` on PATH (`/usr/local/bin`) |
+| wasm | `~/.config/zellij/plugins/zj_radar.wasm` |
+| layout | `~/.config/zellij/layouts/radar.kdl` |
+
+`install.sh` provisions all three (pinned by `ZJ_RADAR_VERSION`) and the config
+alias it depends on. Diagnose by symptom:
+
+- **`zellij -l radar` → "layout not found"** — `layouts/radar.kdl` missing. Copy it
+  from `~/.local/share/zj-radar/zellij/layouts/` after `zj-radar run --print-cmd`
+  materializes that directory.
+- **Radar tab opens but is empty** — the plugin cannot read its wasm: check
+  `plugins/zj_radar.wasm` exists and the `radar location=` alias in `config.kdl`
+  points at it. Do **not** run `zj-radar setup --force`: it rewrites the
+  hand-owned alias and flips `naming` to `managed`.
+- **No statuses at all, pi works** — `zj-radar` is not on PATH; the pi bridge
+  swallows the ENOENT by design. Install the CLI, then restart pi.
+- **Version drift** — the CLI and the loaded wasm must be the same release; a
+  mismatch shows an empty rail with no error. Re-pin `ZJ_RADAR_VERSION` in both
+  `install.sh` and `workflow-do/Dockerfile` together.
+
+[1 more lines in file. Use offset=77 to continue.]
+
 Flags here were checked against zellij 0.44–0.45; if one is rejected, see
 `zellij action --help` for the current name.

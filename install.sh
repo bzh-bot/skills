@@ -493,6 +493,70 @@ else
   warn "no setup-mermaid.sh — diagram beats cannot render"
 fi
 
+# 5c. zellij radar (zj-radar) --------------------------------------------------
+# zj-radar is the agent-status rail in zellij: the CLI (`zj-radar notify`) feeds
+# the `zj_radar.wasm` sidebar that the config binds to Alt r via `zellij -l radar`.
+# It lives OUTSIDE this repo, so a fresh box silently had a broken Alt r: the
+# config pointed at ~/.config/zellij/plugins/zj_radar.wasm, the file was never
+# installed, `zj-radar` was not on PATH (ENOENT in the pi bridge), and no
+# layouts/radar.kdl existed for `-l radar`. Provision all three here.
+#
+# The version MUST match the cage image (workflow-do/Dockerfile ARG
+# ZJ_RADAR_VERSION): the CLI talks to the host zellij server over a pipe, and a
+# CLI older/newer than the loaded wasm drifts silently.
+say "zellij radar (zj-radar)"
+ZJ_RADAR_VERSION="${ZJ_RADAR_VERSION:-v0.9.0}"
+ZJ_RADAR_DATA="${XDG_DATA_HOME:-$HOME/.local/share}/zj-radar/zellij"
+ZJ_CFG="${XDG_CONFIG_HOME:-$HOME/.config}/zellij"
+if command -v zj-radar >/dev/null 2>&1; then
+  _zjr="$(zj-radar --version 2>/dev/null | awk '{print $2}')"
+  echo "  zj-radar $_zjr"
+  [ "v$_zjr" = "$ZJ_RADAR_VERSION" ] \
+    || warn "zj-radar $_zjr != image pin $ZJ_RADAR_VERSION — rebuild cage-base or re-pin"
+else
+  curl --proto '=https' --tlsv1.2 -LsSf \
+    "https://github.com/marktoda/zj-radar/releases/download/${ZJ_RADAR_VERSION}/install.sh" \
+    | ZJ_RADAR_VERSION="$ZJ_RADAR_VERSION" ZJ_RADAR_BIN_DIR=/usr/local/bin sh >/dev/null 2>&1 \
+    || warn "zj-radar install failed — Alt r (radar tab) will be broken"
+  command -v zj-radar >/dev/null && echo "  zj-radar $(zj-radar --version 2>/dev/null | awk '{print $2}')"
+fi
+
+# Materialize the CLI's own config-dir (wasm + layouts) without launching a session.
+# `run --print-cmd` writes it as a side effect; that is the only offline way to get
+# the artefacts at the exact version of the CLI on PATH.
+if command -v zj-radar >/dev/null 2>&1; then
+  zj-radar run --print-cmd >/dev/null 2>&1 || true
+  mkdir -p "$ZJ_CFG/plugins" "$ZJ_CFG/layouts"
+  if [ -f "$ZJ_RADAR_DATA/plugins/zj_radar.wasm" ]; then
+    cp -f "$ZJ_RADAR_DATA/plugins/zj_radar.wasm" "$ZJ_CFG/plugins/zj_radar.wasm"
+    echo "  wasm    $ZJ_CFG/plugins/zj_radar.wasm"
+  else
+    warn "no wasm under $ZJ_RADAR_DATA — the radar rail cannot load"
+  fi
+  # `zellij -l radar` (the Alt r binding) resolves this file from the user's config dir.
+  if [ -f "$ZJ_RADAR_DATA/layouts/radar.kdl" ] && [ ! -f "$ZJ_CFG/layouts/radar.kdl" ]; then
+    cp -f "$ZJ_RADAR_DATA/layouts/radar.kdl" "$ZJ_CFG/layouts/radar.kdl"
+    echo "  layout  $ZJ_CFG/layouts/radar.kdl"
+  elif [ -f "$ZJ_CFG/layouts/radar.kdl" ]; then
+    echo "  layout  present"
+  else
+    warn "no layouts/radar.kdl — Alt r will fail with 'layout not found'"
+  fi
+  # The config must alias the plugin (`radar location="file:…/zj_radar.wasm"`) and
+  # load it in the background. Hand-owned on purpose: zj-radar setup would flip
+  # `naming` to managed, so this script never rewrites an existing block.
+  if [ -f "$ZJ_CFG/config.kdl" ]; then
+    if grep -qE '^\s*radar location=' "$ZJ_CFG/config.kdl"; then
+      echo "  config  radar alias present"
+    else
+      warn "config.kdl has no 'radar' plugin alias — add it under plugins { }:"
+      warn "  radar location=\"file:$ZJ_CFG/plugins/zj_radar.wasm\" { naming \"off\" }"
+    fi
+    grep -qE '^\s*radar\s*$' "$ZJ_CFG/config.kdl" \
+      || warn "config.kdl load_plugins has no bare 'radar' entry — the rail will not collect status headlessly"
+  fi
+fi
+
 # 6. neovim -------------------------------------------------------------------
 say "neovim"
 if command -v nvim >/dev/null 2>&1; then
