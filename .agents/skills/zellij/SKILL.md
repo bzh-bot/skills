@@ -107,6 +107,13 @@ alias it depends on. Diagnose by symptom:
   hand-owned alias and flips `naming` to `managed`.
 - **No statuses at all, pi works** — `zj-radar` is not on PATH; the pi bridge
   swallows the ENOENT by design. Install the CLI, then restart pi.
+- **Statuses from cage runs never appear (host agents do)** — `zj-radar notify`
+  delivers through `zellij pipe`, not `zellij action`. The cage wrapper in
+  `workflow-do/zellij-wrapper.sh` must forward `pipe` to the host bridge too;
+  when it doesn't, the call falls through to `zellij.real`, prints
+  "There is no active session!", **exits 0**, and every cage agent's status is
+  dropped silently. Verify from inside a cage:
+  `zellij pipe --name radar --args status=running` (no error = wired).
 - **Version drift** — the CLI and the loaded wasm must be the same release; a
   mismatch shows an empty rail with no error. Re-pin `ZJ_RADAR_VERSION` in both
   `install.sh` and `workflow-do/Dockerfile` together.

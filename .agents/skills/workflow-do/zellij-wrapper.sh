@@ -50,6 +50,15 @@ if [ -n "$WORKFLOW_ZELLIJ_TCP_PORT" ]; then
       forward_action "run" "$@"
       exit $?
       ;;
+    pipe)
+      # Agent status reaches the host radar through `zellij pipe` (zj-radar notify).
+      # Without this the call fell through to zellij.real, printed "There is no
+      # active session!", exited 0, and every cage agent's status was silently
+      # dropped — the rail showed nothing while the run was busy (2026-10-27).
+      shift
+      forward_action "pipe" "$@"
+      exit $?
+      ;;
     list-panes|list-tabs|list-sessions|list-clients)
       # Some non-action subcommands are usable via `action <same-name>` on the
       # host session. Forward them so scripts written for host-zellij work
